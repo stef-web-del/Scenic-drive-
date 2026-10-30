@@ -60,6 +60,8 @@ import uniffi.ferrostar.stepAdvanceDistanceEntryAndExit
 import uniffi.ferrostar.stepAdvanceDistanceToEndOfStep
 
 data class NavExtras(
+    /** Fahrt gegen die Rundenrichtung erkannt (Dialog). */
+    val wrongWay: Boolean = false,
     val started: Boolean = false,
     val simulate: Boolean = false,
     val offLoop: Boolean = false,
@@ -139,11 +141,19 @@ class NavViewModel private constructor(
     private var stepSync: StepSync? = null
     private var routeTrack: OffRouteMonitor? = null
     private val policy = OffRoutePolicy()
+    private val app = appCtx.applicationContext
+    private fun nlog(ev: String, f: Map<String, Any?> = emptyMap()) = NavLogFile.log(app, ev, f)
+    private val wrongWay = de.scenicroutes.shared.nav.WrongWayDetector()
+    private var lastFixMs: Long? = null
+    private var lastStepIdx: Int? = null
+    private var lastOff: Boolean? = null
 
     init {
         // Abweichung wird gegen die FESTE Runde bewertet (OffRouteMonitor), nicht durch Ferrostar-Neuberechnung.
         core.deviationHandler = RouteDeviationHandler { _, _, _ -> CorrectiveAction.DoNothing }
         core.spokenInstructionObserver = tts
+        tts.stepIndex = { stepIndex() }
+        tts.log = { ev, f -> nlog(ev, f) }
         tts.setMuted(!graph.settings.voice)
         tts.start()
         // Einstellungen live übernehmen; Stumm-Taste und Einstellung teilen sich den Schlüssel „voice“.
@@ -161,13 +171,22 @@ class NavViewModel private constructor(
                 graph.navLocations.tryEmit(TrackPoint(System.currentTimeMillis(), p.lat, p.lon, null, l.speed?.value, l.horizontalAccuracy))
                 if (_extras.value.arrived) return@collect
                 lastHeading = l.courseOverGround?.degrees?.toDouble()
+                val speedMps = l.speed?.value
+                // Kurs nur bei Fahrt verwenden (im Stand dreht der GPS-Kurs beliebig).
+                val heading = lastHeading?.takeIf { (speedMps ?: 0.0) > 3.0 }
+                val nowW = System.currentTimeMillis()
+                lastFixMs?.let { if (nowW - it > 5_000) nlog("fix_gap", mapOf("gapMs" to nowW - it)) }; lastFixMs = nowW
                 // Zeitstempel nur echt fahren: Simulation läuft mit warpFactor 4, dort keine Sprungbegrenzung.
                 val now = if (_extras.value.simulate) null else System.currentTimeMillis()
                 if (roughFix) { syncSteps(p, now ?: System.currentTimeMillis()); return@collect }
-                val changed = monitor.update(p, now)
+                val changed = monitor.update(p, now, heading)
+                if (monitor.armed && !_extras.value.simulate) {
+                    val pr = monitor.project(p)
+                    if (wrongWay.update(p, heading, speedMps, monitor.loopBearingAt(pr.alongM), pr.distanceM)) onWrongWay(p)
+                }
                 val off = monitor.state == OffRouteMonitor.State.OFF_LOOP
                 val track = routeTrack
-                val offRoute = track != null && track.update(p, now) && track.state == OffRouteMonitor.State.OFF_LOOP
+                val offRoute = track != null && track.update(p, now, heading) && track.state == OffRouteMonitor.State.OFF_LOOP
                 val t = now ?: System.currentTimeMillis()
                 when {
                     changed && off -> when (policy.leftLoop(t)) {
@@ -192,7 +211,10 @@ class NavViewModel private constructor(
                     !monitor.armed && track?.state == OffRouteMonitor.State.OFF_LOOP && policy.approachReplanDue(t) -> reapproach()
                 }
                 _extras.value = _extras.value.copy(offLoop = off, offMode = policy.mode, progressKm = monitor.progressM / 1000)
+                if (lastOff != off) { nlog("off_route", mapOf("off" to off, "mode" to policy.mode.name)); lastOff = off }
                 syncSteps(p, t)
+                nlog("fix", mapOf("lat" to p.lat, "lon" to p.lon, "acc" to l.horizontalAccuracy, "v" to speedMps, "hdg" to heading,
+                    "progressM" to monitor.progressM, "routeM" to track?.progressM, "step" to stepIndex(), "off" to off))
             }
         }
     }
@@ -346,6 +368,7 @@ class NavViewModel private constructor(
             _extras.value = _extras.value.copy(message = "Offline-Routing nicht installiert – bitte selbst zur Runde zurückfahren (Einstellungen → Offline-Routing)"); return
         }
         _extras.value = _extras.value.copy(busy = true, message = reason)
+        nlog("recalc", mapOf("reason" to reason, "progressM" to monitor.progressM))
         viewModelScope.launch {
             val res = runCatching {
                 val rl = Polyline(Polyline6.decode(active.route["geometry"]!!.jsonPrimitive.content))
@@ -407,9 +430,60 @@ class NavViewModel private constructor(
         if (track.state != OffRouteMonitor.State.ON_LOOP || !policy.guidanceVisible) return
         val nav = core.state.value.tripState as? TripState.Navigating ?: return
         val idx = sync.stepEndM.size - nav.remainingSteps.size
-        repeat(sync.stepsToAdvance(idx, track.progressM)) { core.advanceToNextStep() }
+        val n = sync.stepsToAdvance(idx, track.progressM)
+        if (n > 0) {
+            // Mehrere Schritte auf einmal: nur die letzte Ansage sprechen (Ferrostar löst Ansagen synchron aus).
+            tts.beginBatch()
+            try { repeat(n) { core.advanceToNextStep() } } finally { tts.endBatch() }
+            nlog("step_advance", mapOf("from" to idx, "count" to n, "routeM" to track.progressM))
+        }
+        stepIndex()?.let { if (it != lastStepIdx) { lastStepIdx = it; nlog("step", mapOf("index" to it)) } }
         if (sync.arrived(track.progressM) && monitor.progressM > activeLine.lengthM * 0.8) {
             arrive()
+        }
+    }
+
+    private fun stepIndex(): Int? {
+        val sync = stepSync ?: return null
+        val nav = core.state.value.tripState as? TripState.Navigating ?: return null
+        return sync.stepEndM.size - nav.remainingSteps.size
+    }
+
+    /** Falsche Richtung erkannt: Ansage + Dialog „Wenden“ / „Runde in Gegenrichtung neu starten“. */
+    private fun onWrongWay(p: LatLon) {
+        nlog("wrong_way", mapOf("lat" to p.lat, "lon" to p.lon, "progressM" to monitor.progressM))
+        if (policy.guidanceVisible && graph.settings.voice) tts.speak(WRONG_WAY_TEXT, "wrongway-${System.currentTimeMillis()}")
+        _extras.value = _extras.value.copy(wrongWay = true)
+    }
+
+    /** „Wenden“: Dialog schließen, Runde bleibt wie sie ist. */
+    fun dismissWrongWay() { nlog("wrong_way_turn"); _extras.value = _extras.value.copy(wrongWay = false) }
+
+    /** „Runde in Gegenrichtung neu starten“: ab hier rückwärts einmal herum (Route über den Router). */
+    fun restartReversed() {
+        val here = lastLoc ?: return
+        _extras.value = _extras.value.copy(wrongWay = false)
+        val chain = graph.routers()
+        if (chain.isEmpty) { _extras.value = _extras.value.copy(message = "Offline-Routing nicht installiert – Gegenrichtung nicht möglich"); return }
+        if (_extras.value.busy) return
+        _extras.value = _extras.value.copy(busy = true, message = "Runde wird in Gegenrichtung berechnet …")
+        nlog("reverse_restart", mapOf("progressM" to monitor.progressM))
+        viewModelScope.launch {
+            runCatching {
+                val along = activeLine.project(here, hintAlongM = monitor.progressM).alongM
+                val rev = de.scenicroutes.shared.nav.ReverseLoop.line(activeLine, along)
+                chain.first { r -> NavJson.bundleFromOsrm(r.route(de.scenicroutes.shared.nav.ReverseLoop.body(rev))) }
+            }.onSuccess { (b, via) ->
+                activeBundle = b
+                activeLine = Polyline(Polyline6.decode(b.route["geometry"]!!.jsonPrimitive.content))
+                loopOffsetM = 0.0
+                monitor = OffRouteMonitor(activeLine)
+                wrongWay.reset(); policy.backOnLoop()
+                val r = routeOf(b)
+                core.startNavigation(r); trackRoute(r)
+                graph.recorder.setReversed(true)
+                _extras.value = _extras.value.copy(busy = false, message = "Runde läuft jetzt in Gegenrichtung ($via)")
+            }.onFailure { _extras.value = _extras.value.copy(busy = false, message = "Gegenrichtung nicht berechenbar – bitte wenden") }
         }
     }
 
@@ -455,6 +529,7 @@ class NavViewModel private constructor(
     override fun onCleared() { graph.navSession.value = null; stopGuide(); runCatching { core.stopNavigation() }; tts.shutdown(); super.onCleared() }
 
     companion object {
+        const val WRONG_WAY_TEXT = "Du fährst gegen die Richtung der Runde."
         fun toRoute(b: RouteBundle): Route = Route.fromOsrm(NavJson.routeBytes(b), NavJson.waypointBytes(b), 6u)
 
         fun create(ctx: Context, graph: AppGraph, loop: Loop): NavViewModel {

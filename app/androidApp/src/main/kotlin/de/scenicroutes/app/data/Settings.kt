@@ -28,6 +28,10 @@ class Settings(ctx: Context) {
     var voice: Boolean
         get() = nav.voiceOn
         set(v) = updateNav { it.copy(voiceOn = v) }
+    /** Rohdaten 50 Hz (Beschleunigung/Gyro) für den Fehlerbericht mitschreiben. Standard aus (Speicher). */
+    var rawSensors: Boolean
+        get() = p.getBoolean("rawSensors", false)
+        set(v) = p.edit { putBoolean("rawSensors", v) }
     var record: Boolean
         get() = p.getBoolean("record", true)
         set(v) = p.edit { putBoolean("record", v) }

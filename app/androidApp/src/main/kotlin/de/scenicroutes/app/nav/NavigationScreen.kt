@@ -141,6 +141,14 @@ fun NavigationRoute(loop: Loop, onExit: () -> Unit) {
     val loopState = remember(loop.id) { LoopState(track) }
     val gState = rememberGMeter(prefs.showG, speed)
     de.scenicroutes.app.ui.ScenicTheme(dark = NavPrefs.dark(prefs.theme, night)) {
+    if (extras.wrongWay) androidx.compose.material3.AlertDialog(
+        onDismissRequest = vm::dismissWrongWay,
+        icon = { Icon(Lucide.Undo2, null) },
+        title = { Text("Falsche Richtung") },
+        text = { Text("Du fährst gegen die Richtung der Runde. Bitte wenden – oder die Runde ab hier in Gegenrichtung fahren.") },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = vm::dismissWrongWay, modifier = Modifier.testTag("wrongWayTurn")) { Text("Ich wende") } },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = vm::restartReversed, enabled = !extras.busy, modifier = Modifier.testTag("wrongWayReverse")) { Text("Runde in Gegenrichtung") } },
+    )
     DynamicallyOrientingNavigationView(
         modifier = Modifier.fillMaxSize(),
         baseStyle = BaseStyle.Uri(mapStyle()),
@@ -292,26 +300,44 @@ private class LoopState(private val track: de.scenicroutes.shared.nav.LoopTrack)
     }
 }
 
-/** g-Werte aus dem Beschleunigungssensor, nur wenn eingeschaltet; Paar (aktuell, Maximum) oder null ohne Kalibrierung/Sensor. */
+/**
+ * g-Werte (0.6.6): Sekundenwerte aus [VehicleFrame] (Quer-g aus Gyro × Tempo, Längs-g erst nach Achsen-Kalibrierung)
+ * statt ungefilterter Rohbeschleunigung. Maximum = über ≥ 2 aufeinanderfolgende Sekunden gehaltener Wert.
+ * Paar (aktuell, Maximum) oder null ohne Sensor.
+ */
 @Composable
 private fun rememberGMeter(on: Boolean, speedMps: Double?): androidx.compose.runtime.State<Pair<Double, Double?>?> {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val out = remember { mutableStateOf<Pair<Double, Double?>?>(null) }
-    val standing = rememberUpdatedState(speedMps != null && speedMps < 2 / 3.6)
+    val speed = rememberUpdatedState(speedMps)
     androidx.compose.runtime.DisposableEffect(on) {
         val sm = ctx.getSystemService(android.content.Context.SENSOR_SERVICE) as? android.hardware.SensorManager
-        val sensor = sm?.getDefaultSensor(android.hardware.Sensor.TYPE_ACCELEROMETER)
-        if (!on || sensor == null) { out.value = null; return@DisposableEffect onDispose { } }
-        val meter = de.scenicroutes.shared.nav.GMeter()
+        val acc = sm?.getDefaultSensor(android.hardware.Sensor.TYPE_ACCELEROMETER)
+        if (!on || acc == null) { out.value = null; return@DisposableEffect onDispose { } }
+        val frame = de.scenicroutes.shared.trip.VehicleFrame(); val hold = de.scenicroutes.shared.trip.GHold()
         val l = object : android.hardware.SensorEventListener {
-            override fun onSensorChanged(e: android.hardware.SensorEvent) {
-                meter.onSample(e.values[0].toDouble(), e.values[1].toDouble(), e.values[2].toDouble(), standing.value)
-                out.value = meter.current?.let { it to meter.max }
+            override fun onSensorChanged(e: android.hardware.SensorEvent) = synchronized(frame) {
+                val v = e.values
+                if (e.sensor.type == android.hardware.Sensor.TYPE_ACCELEROMETER) frame.onAccel(v[0].toDouble(), v[1].toDouble(), v[2].toDouble(), e.timestamp)
+                else frame.onGyro(v[0].toDouble(), v[1].toDouble(), v[2].toDouble())
             }
             override fun onAccuracyChanged(s: android.hardware.Sensor?, a: Int) {}
         }
-        sm.registerListener(l, sensor, android.hardware.SensorManager.SENSOR_DELAY_GAME)
-        onDispose { sm.unregisterListener(l) }
+        listOfNotNull(acc, sm.getDefaultSensor(android.hardware.Sensor.TYPE_GYROSCOPE)).forEach { sm.registerListener(l, it, 20_000) }
+        val h = android.os.Handler(android.os.Looper.getMainLooper())
+        var lastV: Double? = null
+        val tick = object : Runnable {
+            override fun run() {
+                val v = speed.value; val dvdt = if (v != null && lastV != null) v - lastV!! else null; lastV = v
+                val s = synchronized(frame) { frame.flush(v, dvdt) }
+                val g = s.latG?.let { kotlin.math.hypot(it, s.lonG ?: 0.0) }
+                if ((v ?: 0.0) >= 5 / 3.6) hold.add(g) else hold.add(null)
+                out.value = g?.let { it to hold.max }
+                h.postDelayed(this, 1000)
+            }
+        }
+        h.postDelayed(tick, 1000)
+        onDispose { h.removeCallbacks(tick); sm.unregisterListener(l) }
     }
     return out
 }

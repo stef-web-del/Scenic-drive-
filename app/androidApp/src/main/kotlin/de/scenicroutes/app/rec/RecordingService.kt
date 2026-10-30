@@ -71,6 +71,7 @@ class RecordingService : LifecycleService() {
     private val fused by lazy { LocationServices.getFusedLocationProviderClient(this) }
     private val frame = VehicleFrame()
     private var sensorThread: HandlerThread? = null
+    @Volatile private var raw = false
     private var lastSpeed: Double? = null; private var lastT = 0L
 
     private val cb = object : LocationCallback() {
@@ -86,6 +87,10 @@ class RecordingService : LifecycleService() {
     private val sensors = object : SensorEventListener {
         override fun onSensorChanged(e: SensorEvent) = synchronized(frame) {
             val v = e.values
+            if (raw) {
+                val t = System.currentTimeMillis() - (android.os.SystemClock.elapsedRealtimeNanos() - e.timestamp) / 1_000_000
+                RawSensorLog.write(this@RecordingService, t, if (e.sensor.type == Sensor.TYPE_ACCELEROMETER) 'a' else 'g', v[0], v[1], v[2])
+            }
             if (e.sensor.type == Sensor.TYPE_ACCELEROMETER) frame.onAccel(v[0].toDouble(), v[1].toDouble(), v[2].toDouble(), e.timestamp)
             else frame.onGyro(v[0].toDouble(), v[1].toDouble(), v[2].toDouble())
         }
@@ -152,6 +157,7 @@ class RecordingService : LifecycleService() {
     @SuppressLint("MissingPermission")
     private fun begin() {
         running = true
+        raw = graph.settings.rawSensors
         if (graph.simulating.value) {
             simJob = lifecycleScope.launch { graph.navLocations.collect { fix(it) } } // Simulation: Ferrostar-Positionen
         } else {
@@ -169,6 +175,7 @@ class RecordingService : LifecycleService() {
         runCatching { getSystemService(SensorManager::class.java)?.unregisterListener(sensors) }
         sensorThread?.quitSafely(); sensorThread = null
         simJob?.cancel(); running = false
+        RawSensorLog.close()
     }
 
     private fun stopEverything() {

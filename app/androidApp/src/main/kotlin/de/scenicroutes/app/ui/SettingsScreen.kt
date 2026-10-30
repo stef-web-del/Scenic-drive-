@@ -195,6 +195,11 @@ private fun AboutPage() {
             leadingContent = { Icon(Lucide.RefreshCw, null) }, colors = groupItemColors())
         ListItem(headlineContent = { Text("Fehlerbericht anzeigen und kopieren") }, modifier = Modifier.testTag("crashReport").clickable(role = Role.Button) { crash = CrashLog.read(ctx) ?: "" },
             supportingContent = { Text("Letzter Absturz, nur auf diesem Gerät gespeichert. Wird nie automatisch gesendet.") }, leadingContent = { Icon(Lucide.Bug, null) }, colors = groupItemColors())
+        var raw by remember { mutableStateOf(g.settings.rawSensors) }
+        ListItem(headlineContent = { Text("Sensor-Rohdaten für Fehlerbericht") },
+            supportingContent = { Text("Beschleunigung/Gyro mit 50 Hz mitschreiben (braucht Speicher, 3 Tage aufbewahrt). Fehlerbericht als ZIP: Fahrt öffnen → Teilen → „Fehlerbericht (ZIP)“.") },
+            leadingContent = { Icon(Lucide.Bug, null) },
+            trailingContent = { Switch(raw, { raw = it; g.settings.rawSensors = it }, Modifier.testTag("rawSensors")) }, colors = groupItemColors())
     }
     GroupTitle("Datenquellen")
     SettingsGroup {

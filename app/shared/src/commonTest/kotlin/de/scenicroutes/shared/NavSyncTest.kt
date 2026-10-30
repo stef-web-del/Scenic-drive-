@@ -20,8 +20,11 @@ class NavSyncTest {
     @Test fun skipsMissedStepsAfterGap() {
         val m = OffRouteMonitor(line)
         m.update(a, 0); m.update(LatLon(49.701, 9.22), 7_000)
-        // 90 s Lücke, wieder da mitten auf Schritt 2 (c→d)
+        // 90 s Lücke, wieder da mitten auf Schritt 2 (c→d). Seit 0.6.6 ist das Vorwärtsfenster auf 2 km begrenzt:
+        // ein Einzel-Fix ~2,6 km voraus springt nicht mehr, drei plausibel vorwärts laufende Fixes schon.
         m.update(LatLon(49.705, 9.235), 97_000)
+        assertEquals(0, sync.stepsToAdvance(0, m.progressM))
+        m.update(LatLon(49.7048, 9.235), 98_000); m.update(LatLon(49.7046, 9.235), 99_000)
         assertEquals(2, sync.stepsToAdvance(0, m.progressM))
     }
 

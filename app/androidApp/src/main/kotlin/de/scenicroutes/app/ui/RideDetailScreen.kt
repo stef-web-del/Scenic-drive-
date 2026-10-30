@@ -195,6 +195,7 @@ fun RideDetailScreen(
                     DropdownMenu(menu, { menu = false }) {
                         DropdownMenuItem(text = { Text("Als GPX teilen") }, onClick = { menu = false; d?.let { scope.launch { shareRide(ctx, it.trip, gpx = true) } } }, modifier = Modifier.testTag("exportGpx"))
                         DropdownMenuItem(text = { Text("Als CSV teilen (alle Messwerte)") }, onClick = { menu = false; d?.let { scope.launch { shareRide(ctx, it.trip, gpx = false) } } }, modifier = Modifier.testTag("exportCsv"))
+                        DropdownMenuItem(text = { Text("Fehlerbericht (ZIP)") }, onClick = { menu = false; d?.let { scope.launch { shareDebugZip(ctx, it.trip) } } }, modifier = Modifier.testTag("exportDebug"))
                     }
                 }
                 IconButton(onClick = { deleting = true }, modifier = Modifier.testTag("delete")) { Icon(Lucide.Trash2, "Löschen") }
@@ -259,8 +260,8 @@ private fun Stats(s: RideSummary) {
     val items = listOf(
         "Dauer" to fmtDur(s.durationS * 1000), "In Bewegung" to fmtDur(s.movingS * 1000), "Strecke" to fmtKm1(s.distanceM),
         "Ø Tempo" to "%.0f km/h".format(s.avgKmh), "Max. Tempo" to "%.0f km/h".format(s.maxKmh), "Kurven" to "${s.curves}",
-        "Bergauf" to "%.0f m".format(s.ascentM), "Bergab" to "%.0f m".format(s.descentM), "Max. Quer-g" to "%.2f g".format(Locale.GERMANY, s.maxLatG),
-        "Max. Beschl." to "%.2f g".format(Locale.GERMANY, s.maxLonAccG), "Max. Verzög." to "%.2f g".format(Locale.GERMANY, s.maxBrakeG), "Punkte" to "${s.points}",
+        "Bergauf" to "%.0f m".format(s.ascentM), "Bergab" to "%.0f m".format(s.descentM), "Max. Quer-g" to "%.2f g (P99 %.2f)".format(Locale.GERMANY, s.maxLatG, s.p99LatG),
+        "Max. Beschl." to (if (s.lonCalibrated) "%.2f g (P99 %.2f)".format(Locale.GERMANY, s.maxLonAccG, s.p99LonAccG) else "–"), "Max. Verzög." to (if (s.lonCalibrated) "%.2f g (P99 %.2f)".format(Locale.GERMANY, s.maxBrakeG, s.p99BrakeG) else "–"), "Punkte" to "${s.points}",
     )
     Column(Modifier.padding(Tokens.spaceLg).testTag("stats"), verticalArrangement = Arrangement.spacedBy(Tokens.spaceMd)) {
         items.chunked(3).forEach { row ->
@@ -364,4 +365,33 @@ suspend fun shareRide(ctx: Context, t: Trip, gpx: Boolean) {
     val f = withContext(Dispatchers.IO) { exportRide(ctx, t, gpx) }
     val uri = FileProvider.getUriForFile(ctx, ctx.packageName + ".files", f)
     runCatching { ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType(if (gpx) "application/gpx+xml" else "text/csv").putExtra(Intent.EXTRA_STREAM, uri).putExtra(Intent.EXTRA_SUBJECT, t.title).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION), if (gpx) "GPX teilen" else "CSV teilen")) }
+}
+
+/**
+ * Fehlerbericht (0.6.6): ZIP mit GPX (inkl. Genauigkeit, Kurs, Gierrate, g-Spitze), CSV, Navigationsprotokoll
+ * (navlog.jsonl, Zeitraum der Fahrt) und – nur wenn in den Einstellungen eingeschaltet – 50-Hz-Rohdaten.
+ * Bleibt lokal, bis der Nutzer ihn selbst teilt.
+ */
+fun exportDebugZip(ctx: Context, t: Trip): File {
+    val pts = ctx.graph.trips.points(t.id)
+    val iso = { ms: Long -> Instant.ofEpochMilli(ms).toString() }
+    val from = (pts.minOfOrNull { it.timeMs } ?: t.startedMs) - 60_000
+    val to = (pts.maxOfOrNull { it.timeMs } ?: System.currentTimeMillis()) + 60_000
+    val f = File(ctx.cacheDir, "gpx").apply { mkdirs() }.resolve("fehlerbericht-${t.id}.zip")
+    java.util.zip.ZipOutputStream(f.outputStream().buffered()).use { z ->
+        fun put(name: String, text: String) { z.putNextEntry(java.util.zip.ZipEntry(name)); z.write(text.toByteArray()); z.closeEntry() }
+        put("fahrt.gpx", Gpx.write(t.title, pts, iso))
+        put("fahrt.csv", Csv.write(pts, iso))
+        put("navlog.jsonl", de.scenicroutes.app.nav.NavLogFile.lines(ctx, from, to).joinToString("\n", postfix = "\n"))
+        val raw = de.scenicroutes.app.rec.RawSensorLog.lines(ctx, from, to)
+        if (raw.isNotEmpty()) put("sensoren_50hz.csv", de.scenicroutes.app.rec.RawSensorLog.HEADER + "\n" + raw.joinToString("\n", postfix = "\n"))
+        put("info.txt", "App ${de.scenicroutes.app.BuildConfig.VERSION_NAME} (${de.scenicroutes.app.BuildConfig.VERSION_CODE})\nGerät ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}, Android ${android.os.Build.VERSION.RELEASE}\nFahrt ${t.id}: ${t.title}\nPunkte ${pts.size}\nRohdaten 50 Hz: ${if (raw.isEmpty()) "aus/keine" else "${raw.size} Zeilen"}\n")
+    }
+    return f
+}
+
+suspend fun shareDebugZip(ctx: Context, t: Trip) {
+    val f = withContext(Dispatchers.IO) { exportDebugZip(ctx, t) }
+    val uri = FileProvider.getUriForFile(ctx, ctx.packageName + ".files", f)
+    runCatching { ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("application/zip").putExtra(Intent.EXTRA_STREAM, uri).putExtra(Intent.EXTRA_SUBJECT, "Fehlerbericht: " + t.title).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION), "Fehlerbericht teilen")) }
 }

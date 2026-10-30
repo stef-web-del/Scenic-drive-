@@ -296,3 +296,16 @@ Freigabe Stefan 13:38 (t105s570). Backup: /workspace/backup_scenic_3010_vor_kata
 Mainbullau und Windischbuchener Steige sind in beiden Ständen nur teilweise enthalten (28 % / 40 %). OBI-Start mit 45–60 min: alle Runden.
 - Bewertung: Ortsdurchfahrt deutlich besser, aber Vielfalt deutlich schlechter (−78 % gültige Runden, −24 % Vertreter). Deshalb kein Nav-Bau und kein Upload; Standard bleibt 1.0, Caches zurückgespielt.
 - Behoben: `api.find_loops(max_results=…)` ohne `n` stürzte ab. Neu: phase3/qa_katalog.py. pytest 23/23 grün.
+
+## 2026-10-30, 14:08 – 0.6.6 umgesetzt (Code, kein Release)
+
+Freigabe Stefan 13:53 für alle Vorschläge aus der Analyse. versionCode 15 / 0.6.6 im Code, **kein Release, kein OTA**.
+- **Schnitt/Max:** `TripMath.stats` rechnet dt als Double, ignoriert Segmentbrüche; Strecke zählt nur bei ≥ 5 km/h zur Fahrzeit. Max = Median über 3 Fixes, gedeckelt durch Strecke/Zeit (×1,25 + 2 m/s).
+- **Ansagen:** NavSpeech nur noch QUEUE_FLUSH über `SpeechGate`; Schrittsprünge werden gebündelt, nur die aktuelle Ansage kommt, Ansagen > 5 s alt fallen weg.
+- **OffRouteMonitor:** Vorwärtsfenster max. 2 km; Fortschritt nur, wenn der Kurs zur Runde passt (≤ 120°). Abkürzungen weiter über 3 konsistente Fixes.
+- **Falschfahrt:** `WrongWayDetector` (> 120°, ≥ 3 Fixes, ≥ 150 m, ≤ 40 m neben der Runde). Ansage + Dialog „Umdrehen“ / „Runde andersherum fahren“ (`ReverseLoop`, Valhalla break/through).
+- **g-Werte:** Live-Anzeige aus VehicleFrame (1-s-Werte), Maxima nur, wenn ≥ 2 Fixes in Folge gehalten; Längs-g gegen GPS-dv/dt (≤ 0,25 g), vor Kalibrierung kein Längs-Max; P99 in der Fahrtansicht.
+- **Fehlerbericht (ZIP):** GPX mit acc/bearing/yaw/gPeak, CSV, navlog.jsonl (14 Tage), optional 50-Hz-Rohdaten (Schalter in den Einstellungen, standardmäßig aus, 3 Tage).
+- **navsim:** neues Szenario `runde_rueckwaerts` (Falschfahrt binnen 20 s erkannt, kein Fortschrittssprung); alle 40 Szenarien mit „after“ grün, Ergebnis in tools/navsim/ergebnis-0.6.6.csv. App-Logik dort nachgezogen (2-km-Fenster, Kursprüfung).
+- NavSyncTest.skipsMissedStepsAfterGap angepasst: nach 90-s-Lücke springt ein Einzel-Fix > 2 km nicht mehr, drei Vorwärts-Fixes schon.
+- Tests: shared jvm 121, androidHost 71, androidApp 146 grün; checkNoMaterialIcons und assembleRelease grün. Neu: Fixes066Test (18). Kein Gerätetest (kein KVM).

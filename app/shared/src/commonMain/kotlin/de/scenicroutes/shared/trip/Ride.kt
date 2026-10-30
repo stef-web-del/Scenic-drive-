@@ -11,6 +11,10 @@ data class RideSummary(
     val distanceM: Double, val durationS: Long, val movingS: Long, val avgKmh: Double, val maxKmh: Double,
     val ascentM: Double, val descentM: Double, val maxLonAccG: Double, val maxBrakeG: Double, val maxLatG: Double,
     val curves: Int, val points: Int, val hasSensors: Boolean,
+    /** 99. Perzentil (Fahrt-typische Spitzen, ohne Einzelereignisse). 0.6.6 */
+    val p99LonAccG: Double = 0.0, val p99BrakeG: Double = 0.0, val p99LatG: Double = 0.0,
+    /** Längs-g aus kalibrierter Sensorachse (false: keine Längswerte vor der Kalibrierung). */
+    val lonCalibrated: Boolean = true,
 ) {
     val maxLonG get() = max(maxLonAccG, maxBrakeG)
 }
@@ -83,20 +87,69 @@ object RideMath {
         }
     }
 
+    /** Toleranz Sensor-Längs-g gegen GPS-dv/dt (Plausibilisierung). */
+    const val LON_TOL_G = 0.25
+
+    /**
+     * Gehaltenes Maximum (0.6.6): ein Wert zählt erst, wenn er über ≥ 2 aufeinanderfolgende Fixes (~1 s)
+     * anliegt = max über i von min(v[i], v[i+1]). Einzelne Ausreißer (Schlagloch, Handy rutscht) zählen nicht.
+     * [ok] = Paar i→i+1 ist zusammenhängend (gleicher Abschnitt, Abstand ≤ 2,5 s, beide gültig).
+     */
+    fun sustainedMax(v: DoubleArray, ok: (Int) -> Boolean): Double {
+        var best = 0.0
+        for (i in 0 until v.size - 1) if (ok(i)) best = max(best, minOf(v[i], v[i + 1]))
+        return best
+    }
+
+    fun p99(v: List<Double>): Double {
+        if (v.isEmpty()) return 0.0
+        val s = v.sorted(); return s[((s.size - 1) * 0.99).toInt()]
+    }
+
     fun summary(raw: List<TrackPoint>): RideSummary {
         val pts = TripMath.clean(raw); val s = TripMath.stats(raw); val sm = samples(raw)
         val (up, down) = climb(pts.mapNotNull { it.altM })
         val lat = DoubleArray(sm.size) { sm[it].latG }
-        val moving = sm.filter { it.kmh >= 5 }
+        val hasSensors = raw.any { it.latG != null }
+        val glon = gpsLonG(pts)
+        // Längs-g je Fix: mit Sensoren nur kalibrierte Werte, die zur GPS-Tempoänderung passen; sonst GPS.
+        // Alt-Daten (vor 0.6.6) speicherten vor der Kalibrierung GPS-dv/dt als lonG → an Gleichheit erkennbar.
+        val lonOk = BooleanArray(pts.size) { i ->
+            val l = pts[i].lonG
+            if (!hasSensors) true
+            else l != null && abs(l - glon[i]) > 0.005 && abs(l - glon[i]) <= LON_TOL_G
+        }
+        val lonCal = !hasSensors || lonOk.any { it }
+        val moving = BooleanArray(sm.size) { sm[it].kmh >= 5 }
+        fun pair(i: Int) = moving[i] && moving[i + 1] && pts[i].seg == pts[i + 1].seg && pts[i + 1].timeMs - pts[i].timeMs <= 2_500
+        val acc = DoubleArray(sm.size) { if (lonOk[it]) sm[it].lonG.coerceAtLeast(0.0) else 0.0 }
+        val brk = DoubleArray(sm.size) { if (lonOk[it]) (-sm[it].lonG).coerceAtLeast(0.0) else 0.0 }
+        val latL = DoubleArray(sm.size) { lat[it].coerceAtLeast(0.0) }; val latR = DoubleArray(sm.size) { (-lat[it]).coerceAtLeast(0.0) }
+        val mi = sm.indices.filter { moving[it] }
         return RideSummary(
             s.distanceM, s.durationS, s.movingS, s.avgMovingKmh, s.maxKmh, up, down,
-            moving.maxOfOrNull { it.lonG }?.coerceAtLeast(0.0) ?: 0.0, moving.maxOfOrNull { -it.lonG }?.coerceAtLeast(0.0) ?: 0.0,
-            moving.maxOfOrNull { abs(it.latG) } ?: 0.0, curves(lat, pts), raw.size, raw.any { it.latG != null },
+            sustainedMax(acc) { pair(it) && lonOk[it] && lonOk[it + 1] }, sustainedMax(brk) { pair(it) && lonOk[it] && lonOk[it + 1] },
+            max(sustainedMax(latL, ::pair), sustainedMax(latR, ::pair)), curves(lat, pts), raw.size, hasSensors,
+            p99(mi.filter { lonOk[it] }.map { acc[it] }), p99(mi.filter { lonOk[it] }.map { brk[it] }), p99(mi.map { abs(lat[it]) }), lonCal,
         )
     }
 
     /** Anteil der Runde, der gefahren wurde (250-m-Abschnitte, 40 m Toleranz). */
     fun loopShare(loop: Polyline, pts: List<TrackPoint>) = TripMath.coverageShare(TripMath.coverage(loop, pts))
+}
+
+/** Live-Anzeige (0.6.6): letzter Sekundenwert + gehaltenes Maximum (≥ 2 aufeinanderfolgende Sekunden). */
+class GHold {
+    private var prev: Double? = null
+    var current = 0.0; private set
+    var max = 0.0; private set
+    fun add(g: Double?) {
+        if (g == null) { prev = null; return }
+        current = g
+        prev?.let { max = max(max, minOf(it, g)) }
+        prev = g
+    }
+    fun reset() { prev = null; current = 0.0; max = 0.0 }
 }
 
 object Csv {
@@ -156,7 +209,8 @@ class VehicleFrame {
             if (n > 0.3) { for (i in 0..2) fwd[i] = fwd[i] * 0.8 + 0.2 * s * lin[i] / n; fwdEvents++ }
         }
         val cal = fwdEvents >= 5 && norm(horiz(fwd)) > 0.1
-        val lon = if (cal) { val f = unit(horiz(fwd)); (lin[0] * f[0] + lin[1] * f[1] + lin[2] * f[2]) / RideMath.G } else dvdt?.div(RideMath.G)
+        // 0.6.6: vor der Kalibrierung KEIN Längs-g (vorher GPS-dv/dt, als Sensorwert ausgegeben → Rohspitzen).
+        val lon = if (cal) { val f = unit(horiz(fwd)); (lin[0] * f[0] + lin[1] * f[1] + lin[2] * f[2]) / RideMath.G } else null
         // Vorzeichen der Drehung: Android-Gyro positiv = gegen den Uhrzeigersinn um die Achse; Schwerkraftvektor zeigt bei ruhendem Handy „nach oben“ (Reaktionskraft).
         val lat = if (yaw != null && speedMps != null && speedMps > 3) speedMps * yaw / RideMath.G else if (yaw != null) 0.0 else null
         val out = Second(lon, lat, yaw?.let { it * 180 / kotlin.math.PI }, peak, cal)

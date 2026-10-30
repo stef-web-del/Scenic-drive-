@@ -44,6 +44,8 @@ class RideRecorder(
 
     val recording get() = _state.value != null
 
+    /** Runde wurde während der Fahrt in Gegenrichtung neu gestartet (0.6.6): „gefahren“ gilt dann für die Gegenrichtung. */
+    @Synchronized fun setReversed(r: Boolean) { reversed = r }
     @Synchronized fun start(loopId: Int?, title: String, reversed: Boolean = false): Long {
         _state.value?.let { return it.tripId }
         val t = now(); this.reversed = reversed; last = null

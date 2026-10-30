@@ -104,16 +104,31 @@ fn project_pen(line: &Line, p: P, hint: f64, window: f64, penalty: f64) -> Proj 
     }
     best.unwrap()
 }
-struct App { progress: f64, off: bool, off_count: u32, last_t: Option<f64>, pending: Option<(f64, f64, u32)> }
+struct App { progress: f64, off: bool, off_count: u32, last_t: Option<f64>, pending: Option<(f64, f64, u32)>, ww: WrongWay }
+/// WrongWayDetector (0.6.6): > 120° gegen die Runde, ≤ 40 m daneben, ≥ 3 Fixes und ≥ 150 m.
+#[derive(Default)]
+struct WrongWay { n: u32, m: f64, last: Option<P>, fired_at: Option<f64> }
+impl WrongWay {
+    fn update(&mut self, p: P, d: f64, diff: Option<f64>, t: f64) {
+        match diff { Some(x) if x > 120.0 && d <= 40.0 => { if let Some(q) = self.last { self.m += dist(q, p); } self.n += 1; self.last = Some(p);
+            if self.fired_at.is_none() && self.n >= 3 && self.m >= 150.0 { self.fired_at = Some(t); } }
+            _ => { self.n = 0; self.m = 0.0; self.last = None; } }
+    }
+}
 impl App {
     /// OffRouteMonitor.update (Schwelle 50 m, zurück < 25 m, 3 Fixes; Fortschritt monoton).
     /// Neu: Fortschritt springt höchstens 300 m + 70 m/s seit dem letzten Treffer vor (Runde kreuzt sich /
     /// Start = Ziel: ein verrauschter Fix am Start passt sonst aufs Rundenende). Erster Treffer: starke Präferenz
     /// für den Anfang, damit Einstieg mitten in der Runde trotzdem gefunden wird.
-    fn update(&mut self, line: &Line, p: P, t: f64) {
+    fn update(&mut self, line: &Line, p: P, t: f64, hdg: Option<f64>) {
         let pr = match self.last_t { None => project_pen(line, p, 0.0, 3000.0, 60.0), Some(_) => project(line, p, self.progress, 3000.0) };
-        let max_jump = self.last_t.map_or(f64::INFINITY, |lt| 300.0 + 70.0 * (t - lt));
-        if pr.d < 25.0 && pr.along >= self.progress - 200.0 && pr.along <= self.progress + max_jump {
+        // 0.6.6: Fenster höchstens 2 km; Fortschritt nur, wenn die Fahrtrichtung zur Runde passt.
+        let max_jump = self.last_t.map_or(f64::INFINITY, |lt| (300.0 + 70.0 * (t - lt)).min(2000.0));
+        let diff = hdg.map(|h| hdiff(h, loop_bearing(line, pr.along)));
+        self.ww.update(p, pr.d, diff, t);
+        let against = diff.map_or(false, |x| x > 120.0);
+        if against { self.pending = None; }
+        else if pr.d < 25.0 && pr.along >= self.progress - 200.0 && pr.along <= self.progress + max_jump {
             if pr.along > self.progress || self.last_t.is_none() { self.progress = self.progress.max(pr.along); }
             self.last_t = Some(t); self.pending = None;
         } else if pr.d < 25.0 && pr.along > self.progress + max_jump {
@@ -143,17 +158,30 @@ impl Rng {
 }
 
 /// Ein Fix: Position, gemeldete Genauigkeit, wahre Lage auf der Runde (None = abseits), Zeit in s.
-struct Fix { p: P, acc: f64, truth: Option<f64>, t: f64 }
+struct Fix { p: P, acc: f64, truth: Option<f64>, t: f64, hdg: Option<f64> }
+/// Kurs a→b in Grad (0 = Nord, im Uhrzeigersinn).
+fn bearing(a: P, b: P) -> f64 {
+    let e = (b.lng - a.lng) * 111_320.0 * a.lat.to_radians().cos(); let n = (b.lat - a.lat) * 110_540.0;
+    (e.atan2(n).to_degrees() + 360.0) % 360.0
+}
+fn hdiff(a: f64, b: f64) -> f64 { let d = (a - b).abs() % 360.0; if d > 180.0 { 360.0 - d } else { d } }
+/// Kurs der Runde an Position s (±20 m), wie OffRouteMonitor.loopBearingAt.
+fn loop_bearing(line: &Line, s: f64) -> f64 { let a = (s - 20.0).max(0.0); let b = (s + 20.0).min(line.len()); bearing(line.at(a), line.at(b)) }
 
 /// Fahrt entlang [from, to) der Runde mit 1 Hz.
 fn drive(line: &Line, from: f64, to: f64, t: &mut f64, out: &mut Vec<Fix>) {
     let mut s = from;
-    while s < to { out.push(Fix { p: line.at(s), acc: 5.0, truth: Some(s), t: *t }); s += SPEED; *t += 1.0; }
+    while s < to { out.push(Fix { p: line.at(s), acc: 5.0, truth: Some(s), t: *t, hdg: Some(loop_bearing(line, s)) }); s += SPEED; *t += 1.0; }
+}
+/// Runde rückwärts: von `from` abwärts bis `to` (Kurs entgegen der Runde).
+fn drive_rev(line: &Line, from: f64, to: f64, t: &mut f64, out: &mut Vec<Fix>) {
+    let mut s = from;
+    while s > to { out.push(Fix { p: line.at(s), acc: 5.0, truth: Some(s), t: *t, hdg: Some((loop_bearing(line, s) + 180.0) % 360.0) }); s -= SPEED; *t += 1.0; }
 }
 /// Fahrt abseits (gerade Linie a→b).
 fn drive_off(a: P, b: P, t: &mut f64, out: &mut Vec<Fix>) {
     let d = dist(a, b); let n = (d / SPEED).ceil().max(1.0) as usize;
-    for i in 0..n { let f = i as f64 / n as f64; out.push(Fix { p: P { lat: a.lat + f * (b.lat - a.lat), lng: a.lng + f * (b.lng - a.lng) }, acc: 5.0, truth: None, t: *t }); *t += 1.0; }
+    for i in 0..n { let f = i as f64 / n as f64; out.push(Fix { p: P { lat: a.lat + f * (b.lat - a.lat), lng: a.lng + f * (b.lng - a.lng) }, acc: 5.0, truth: None, t: *t, hdg: Some(bearing(a, b)) }); *t += 1.0; }
 }
 
 fn scenario(name: &str, line: &Line, rng: &mut Rng) -> Vec<Fix> {
@@ -188,12 +216,14 @@ fn scenario(name: &str, line: &Line, rng: &mut Rng) -> Vec<Fix> {
             let mut i = 0; while i < v.len() { let (ex, ny) = line.normal(v[i].truth.unwrap()); let d = rng.range(60.0, 150.0); v[i].p = offset(v[i].p, ex * d, ny * d); v[i].acc = rng.range(10.0, 30.0); i += 133; }
         }
         "einstieg_mitte" => drive(line, 0.5 * l, l, &mut t, &mut v),
+        // 0.6.6: Runde verkehrt herum gefahren (vom Start aus entgegen der Richtung, ~60 %)
+        "runde_rueckwaerts" => drive_rev(line, l, 0.4 * l, &mut t, &mut v),
         _ => unreachable!(),
     }
     // Am Ziel realistisch stehen bleiben: 30 s Stand mit GPS-Rauschen (Wald stärker, Rest wie ein ruhendes Handy).
     let (sd, a0, a1) = match name { "wald" => (10.0, 20.0, 38.0), "rauschen" => (8.0, 6.0, 25.0), _ => (4.0, 5.0, 12.0) };
     let end = line.at(l);
-    for _ in 0..DWELL_S { v.push(Fix { p: offset(end, rng.gauss() * sd, rng.gauss() * sd), acc: rng.range(a0, a1), truth: Some(l), t }); t += 1.0; }
+    for _ in 0..DWELL_S { v.push(Fix { p: offset(end, rng.gauss() * sd, rng.gauss() * sd), acc: rng.range(a0, a1), truth: Some(l), t, hdg: None }); t += 1.0; }
     v
 }
 const DWELL_S: usize = 30;
@@ -215,12 +245,12 @@ impl Arrival {
     }
 }
 
-const SCENARIOS: [&str; 9] = ["exakt", "ausreisser", "rauschen", "wald", "luecken", "abweichung_2km", "rueckkehr_voraus", "abkuerzung", "einstieg_mitte"];
+const SCENARIOS: [&str; 10] = ["exakt", "ausreisser", "rauschen", "wald", "luecken", "abweichung_2km", "rueckkehr_voraus", "abkuerzung", "einstieg_mitte", "runde_rueckwaerts"];
 
-struct Outcome { max_stale_s: f64, stale_pct: f64, complete_at: Option<f64>, final_step: usize, steps: usize, off_seen: bool, banner_while_off: usize }
+struct Outcome { max_stale_s: f64, stale_pct: f64, complete_at: Option<f64>, final_step: usize, steps: usize, off_seen: bool, banner_while_off: usize, wrong_way_s: Option<f64>, max_progress: f64, len: f64 }
 
 fn run(route: &Route, line: &Line, step_end: &[f64], fixes: &[Fix], cfg: NavigationControllerConfig, app_on: bool) -> Outcome {
-    let mut app = App { progress: 0.0, off: false, off_count: 0, last_t: None, pending: None };
+    let mut app = App { progress: 0.0, off: false, off_count: 0, last_t: None, pending: None, ww: WrongWay::default() };
     let mut arr = Arrival::default(); let end = line.at(line.len());
     let nav = create_navigator(route.clone(), cfg, false);
     let mk = |f: &Fix| UserLocation {
@@ -234,7 +264,7 @@ fn run(route: &Route, line: &Line, step_end: &[f64], fixes: &[Fix], cfg: Navigat
     for f in fixes {
         st = nav.update_user_location(mk(f), st);
         if app_on && std::env::var("NAVSIM_NOAPP").is_err() {
-            app.update(line, f.p, f.t);
+            app.update(line, f.p, f.t, f.hdg);
             if let TripState::Navigating { remaining_steps, .. } = st.trip_state() {
                 let idx = n - remaining_steps.len();
                 if !app.off { for _ in 0..steps_to_advance(step_end, idx, app.progress) { st = nav.advance_to_next_step(st); } }
@@ -267,7 +297,12 @@ fn run(route: &Route, line: &Line, step_end: &[f64], fixes: &[Fix], cfg: Navigat
         }
         last_t = f.t;
     }
-    Outcome { max_stale_s: max_stale, stale_pct: 100.0 * stale_n as f64 / on_n.max(1) as f64, complete_at, final_step, steps: n, off_seen, banner_while_off }
+    // Bezug: erster Fix, der eindeutig gegen die Runde fährt (ein gemeinsamer Start-Stich ist in beide Richtungen gleich)
+    let samples: Vec<(P, f64)> = (0..(line.len() / 10.0) as usize).map(|i| { let a = i as f64 * 10.0; (line.at(a), loop_bearing(line, a)) }).collect();
+    let clear: Vec<bool> = fixes.iter().map(|f| f.hdg.map_or(false, |h| !samples.iter().any(|(q, b)| dist(*q, f.p) < 25.0 && hdiff(h, *b) <= 120.0))).collect();
+    // erster Fix einer Folge von 5 eindeutigen Gegen-Fixes (einzelne Kurven-Fixes zählen nicht)
+    let t0 = (0..clear.len().saturating_sub(4)).find(|&i| clear[i..i + 5].iter().all(|&c| c)).map_or(fixes[0].t, |i| fixes[i].t);
+    Outcome { wrong_way_s: app.ww.fired_at.map(|x| x - t0), max_progress: app.progress, len: line.len(), max_stale_s: max_stale, stale_pct: 100.0 * stale_n as f64 / on_n.max(1) as f64, complete_at, final_step, steps: n, off_seen, banner_while_off }
 }
 
 fn load(path: &str) -> (Route, Line, Vec<f64>) {
@@ -286,6 +321,10 @@ fn load(path: &str) -> (Route, Line, Vec<f64>) {
 }
 
 fn pass(o: &Outcome, sc: &str) -> bool {
+    if sc == "runde_rueckwaerts" {
+        // Falschfahrt binnen 20 s (≈ 300 m) ab dem ersten eindeutigen Gegen-Fix erkannt, Fortschritt springt nicht, keine Ankunft
+        return o.wrong_way_s.map_or(false, |s| (0.0..=20.0).contains(&s)) && o.max_progress < 0.1 * o.len && o.complete_at.is_none();
+    }
     let completes = o.complete_at.map_or(false, |c| c > 0.9);
     let early = o.complete_at.map_or(false, |c| c >= 0.0 && c < 0.9);
     !early && completes && o.max_stale_s <= 20.0 && (o.banner_while_off == 0 || !sc.contains("abweich"))
@@ -297,7 +336,7 @@ fn main() {
     let cfg = args.windows(2).find(|w| w[0] == "--config").map(|w| w[1].clone()).unwrap_or("both".into());
     let files: Vec<&String> = args.iter().filter(|a| a.ends_with(".json")).collect();
     let mut failed = 0;
-    println!("datei;konfig;szenario;schritte;erreicht;fertig_bei;max_veraltet_s;veraltet_%;abweichung_erkannt;banner_abseits;ok");
+    println!("datei;konfig;szenario;schritte;erreicht;fertig_bei;max_veraltet_s;veraltet_%;abweichung_erkannt;banner_abseits;falschfahrt_s;ok");
     for f in files {
         let (route, line, step_end) = load(f);
         for sc in SCENARIOS {
@@ -309,8 +348,8 @@ fn main() {
                 let o = run(&route, &line, &step_end, &fixes, c, app);
                 let ok = pass(&o, sc);
                 if name == "after" && !ok { failed += 1; }
-                println!("{};{};{};{};{};{};{:.0};{:.1};{};{};{}", f.rsplit('/').next().unwrap(), name, sc, o.steps, o.final_step,
-                    o.complete_at.map_or("-".into(), |c| format!("{:.0}%", c * 100.0)), o.max_stale_s, o.stale_pct, o.off_seen, o.banner_while_off, if ok { "OK" } else { "FEHLER" });
+                println!("{};{};{};{};{};{};{:.0};{:.1};{};{};{};{}", f.rsplit('/').next().unwrap(), name, sc, o.steps, o.final_step,
+                    o.complete_at.map_or("-".into(), |c| format!("{:.0}%", c * 100.0)), o.max_stale_s, o.stale_pct, o.off_seen, o.banner_while_off, o.wrong_way_s.map_or("-".into(), |s| format!("{s:.0}")), if ok { "OK" } else { "FEHLER" });
             }
         }
     }
