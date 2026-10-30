@@ -309,3 +309,10 @@ Freigabe Stefan 13:53 für alle Vorschläge aus der Analyse. versionCode 15 / 0.
 - **navsim:** neues Szenario `runde_rueckwaerts` (Falschfahrt binnen 20 s erkannt, kein Fortschrittssprung); alle 40 Szenarien mit „after“ grün, Ergebnis in tools/navsim/ergebnis-0.6.6.csv. App-Logik dort nachgezogen (2-km-Fenster, Kursprüfung).
 - NavSyncTest.skipsMissedStepsAfterGap angepasst: nach 90-s-Lücke springt ein Einzel-Fix > 2 km nicht mehr, drei Vorwärts-Fixes schon.
 - Tests: shared jvm 121, androidHost 71, androidApp 146 grün; checkNoMaterialIcons und assembleRelease grün. Neu: Fixes066Test (18). Kein Gerätetest (kein KVM).
+
+## 2026-10-30, 14:12 – Release 0.6.6 veröffentlicht
+
+Freigabe Stefan 14:10. Release-APK aus 3423880 (versionCode 15 / 0.6.6), signiert mit dem bekannten Zertifikat 538baaec…35d7, SHA-256 416bbe72a407211d56c78df13a86c52337ae03c22b915a30506de13c1a2e78d2, 109223495 Byte.
+- GitHub: https://github.com/stef-web-del/Scenic-drive-/releases/tag/v0.6.6, einziges Asset scenic-routes-0.6.6.apk, Digest stimmt, als neuestes Release markiert.
+- Download-Seite: Deployment dpl_6Lp1aHxrRR2UJUMod3tXYQT6PY4T, statisch (index.html, version.json 15 / 0.6.6, vercel.json mit 307 /app.apk → Asset), ohne Blob/Functions.
+- Live-Check 14:12: /app.apk → 307 → GitHub → 200 application/vnd.android.package-archive, SHA-256 identisch. v0.6.5 und v0.6.4 laden weiter.
