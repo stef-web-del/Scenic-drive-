@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import { BARS, METRICS, bestSegs, sliceGeom, strengthLabels } from "./score"
 import { sb } from "@/test/fixtures"
 import meta from "../../public/data/meta.json"
-import shard from "../../public/data/r/s0.json"
+import shard from "../../public/data/r/s1.json"
 
 describe("score", () => {
   it("bestSegs: ohne Verbindungen und < 1 km, absteigend", () => {
@@ -23,6 +23,6 @@ describe("score", () => {
       for (const m of METRICS) expect(Number.isFinite(d.sb.v[m.k])).toBe(true)
       expect(d.sb.sg.length).toBeGreaterThan(0)
     }
-    expect(n).toBeGreaterThan(0); expect(meta.sbm.n).toBe(342)
+    expect(n).toBeGreaterThan(0); expect(meta.sbm.n).toBe(319)
   })
 })

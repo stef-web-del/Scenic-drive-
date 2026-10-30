@@ -36,17 +36,17 @@ test("Runde öffnen, Varianten anzeigen, zur besten Runde springen", async ({ pa
   void errors
 })
 
-test("50 % Überschneidung → 29 Runden; Experten → 342", async ({ page, errors }) => {
+test("50 % Überschneidung → 26 Runden; Experten → 319", async ({ page, errors }) => {
   await openFilters(page)
   await page.getByRole("radio", { name: "50 %" }).click()
-  await expect(page.getByText(/aktuell 29 Runden/)).toBeVisible()
+  await expect(page.getByText(/aktuell 26 Runden/)).toBeVisible()
   await closeFilters(page)
-  await expect(cards(page)).toHaveCount(29) // alle 29, unter 40 kein „Weitere anzeigen“
-  await expect(page.getByText(/29\s*Runden · max\. 50 %/).first()).toBeVisible()
+  await expect(cards(page)).toHaveCount(26) // alle 26, unter 40 kein „Weitere anzeigen“
+  await expect(page.getByText(/26\s*Runden · max\. 50 %/).first()).toBeVisible()
   await openFilters(page)
   await page.getByRole("switch", { name: "Experten: alle Runden" }).click()
   await closeFilters(page)
-  await expect(page.getByText(/Experten: 342 von 342 Runden/).first()).toBeVisible()
+  await expect(page.getByText(/Experten: 319 von 319 Runden/).first()).toBeVisible()
   void errors
 })
 
@@ -60,7 +60,7 @@ test("GPX-Download", async ({ page, errors }) => {
 })
 
 test("Deep-Link mit Hash stellt Zustand wieder her", async ({ page, errors }) => {
-  await page.goto("/#lvl=3"); await expect(page.getByText(/29\s*Runden · max\. 50 %/).first()).toBeVisible()
+  await page.goto("/#lvl=3"); await expect(page.getByText(/26\s*Runden · max\. 50 %/).first()).toBeVisible()
   void errors
 })
 

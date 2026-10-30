@@ -38,14 +38,14 @@ describe("App (Desktop, echte Daten)", () => {
     await userEvent.click(screen.getByRole("button", { name: "Zurück" }))
     expect(await screen.findByText(/max\. 25 %/)).toBeInTheDocument()
   })
-  it("Filter-Tab: 50 % → 29 Runden; Experten → 342", async () => {
+  it("Filter-Tab: 50 % → 26 Runden; Experten → 319", async () => {
     app(); await list()
     await userEvent.click(screen.getByRole("tab", { name: "Filter" }))
     await userEvent.click(screen.getByRole("radio", { name: "50 %" }))
-    expect(screen.getByText(/aktuell 29 Runden/)).toBeInTheDocument()
+    expect(screen.getByText(/aktuell 26 Runden/)).toBeInTheDocument()
     await userEvent.click(screen.getByRole("switch", { name: "Experten: alle Runden" }))
     await userEvent.click(screen.getByRole("tab", { name: "Runden" }))
-    await waitFor(() => expect(screen.getByText(/Experten:/)).toHaveTextContent("Experten: 342 von 342 Runden"))
+    await waitFor(() => expect(screen.getByText(/Experten:/)).toHaveTextContent("Experten: 319 von 319 Runden"))
   })
   it("Direktlink auf Nicht-Vertreter lädt alle Runden nach und bietet beste Runde", async () => {
     const all = JSON.parse(readFileSync("public/data/all.json", "utf8")); const v = all.find((l: { r: number[] }) => !l.r[1])

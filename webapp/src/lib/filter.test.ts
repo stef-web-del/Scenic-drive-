@@ -26,8 +26,8 @@ describe("visibleLoops – Filter", () => {
 
 describe("Familienlogik auf echten Daten (max_jaccard)", () => {
   it("Standard ist 25 % (Stufe 1)", () => { expect(DEFAULT.lvl).toBe(1); expect(meta.levels[1]).toBe(0.25) })
-  it("Gesamtzahl 342 Runden", () => { expect(meta.total).toBe(342); expect(all).toHaveLength(342) })
-  it.each([[0, 4], [1, 9], [2, 13], [3, 29], [4, 93]])("Stufe %i → %i Familien", (lvl, n) => {
+  it("Gesamtzahl 319 Runden", () => { expect(meta.total).toBe(319); expect(all).toHaveLength(319) })
+  it.each([[0, 5], [1, 9], [2, 12], [3, 26], [4, 72]])("Stufe %i → %i Familien", (lvl, n) => {
     expect(visibleLoops(all, { ...DEFAULT, lvl }, null)).toHaveLength(n)
     expect(representatives(all, lvl)).toBe(n)
   })

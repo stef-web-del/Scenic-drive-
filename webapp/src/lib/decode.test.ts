@@ -16,8 +16,8 @@ it("Roundtrip Kompaktformat (1e-4°, Int16-Deltas)", () => {
   const out = decodeLines(encode({ 9: [[92248, 497009], [92260, 496990], [92100, 497100]], 12: [[90000, 490000]] }))
   expect(out[9]).toEqual([[9.2248, 49.7009], [9.226, 49.699], [9.21, 49.71]]); expect(out[12]).toEqual([[9, 49]])
 })
-it("echte lines.bin: 107 Startrunden, Koordinaten im Raum Miltenberg", () => {
+it("echte lines.bin: 83 Startrunden, Koordinaten im Raum Miltenberg", () => {
   const b = readFileSync("public/data/lines.bin"); const out = decodeLines(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength))
-  expect(Object.keys(out)).toHaveLength(107)
+  expect(Object.keys(out)).toHaveLength(83)
   for (const g of Object.values(out)) for (const [x, y] of g) { expect(x).toBeGreaterThan(8.8); expect(x).toBeLessThan(9.8); expect(y).toBeGreaterThan(49.4); expect(y).toBeLessThan(50) }
 })
