@@ -11,7 +11,8 @@
 5. GitHub-Release im Repo `stef-web-del/Scenic-drive-`, Tag `v<versionName>`, einziges Asset `scenic-routes-<version>.apk`; GitHub-Digest mit eigenem Hash vergleichen.
 6. Download-Seite auf Vercel (`scenic-routes-app-download.vercel.app`) statisch neu deployen: `version.json` (`versionCode`, `versionName`, `apkUrl`, `sha256`, ggf. `minSupported`), `index.html`, Weiterleitung `/app.apk` → Asset (307). Vorlage der Seite: `deploy/index.html`. Wo `version.json` lokal gepflegt wird, habe ich nicht gefunden: **offen**.
 7. Live-Check: `/app.apk` → github.com 302 → Asset 200 (`application/vnd.android.package-archive`), Hash stimmt.
-8. Logbuch-Eintrag.
+8. Aufräumen (Vorgabe Stefan 30.10.2026, „die alten Versionen immer löschen“): Im Vercel-Blob liegen keine APKs mehr. Liegt dort noch eine alte APK (Stand 30.10.: `scenic-routes-m7.apk`, 127 MB, von nichts mehr referenziert), wird sie gelöscht; `version.json` und `/app.apk` zeigen nur auf das GitHub-Asset. Ein Upload-Skript für APKs in den Blob gibt es nicht und soll es nicht mehr geben.
+9. Logbuch-Eintrag.
 
 Die App prüft beim Update den SHA-256 aus `version.json` und verwirft abweichende Dateien. Bei `currentCode < minSupported` ist das Update Pflicht.
 

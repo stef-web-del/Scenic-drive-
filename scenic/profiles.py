@@ -24,7 +24,7 @@ class Params:
     allow_narrow: bool=True
     avoid_eids: tuple=()          # Neuheit: bereits gefahrene Kanten (Kostenaufschlag)
     avoid_mult: float=3.0
-    town_minor_mult: float=1.0   # Kostenfaktor Neben-/Wohnstraßen im Ort (1 = aus; 4 getestet 30.10.2026, siehe Logbuch); >1 hält die Runde im Ort auf der Hauptstraße
+    town_minor_mult: float=2.5   # Kostenfaktor Neben-/Wohnstraßen im Ort (1 = aus; 1,5/2/2,5/4 getestet 30.10.2026, 2,5 gewählt, siehe Logbuch); >1 hält die Runde im Ort auf der Hauptstraße
     # Hin-und-zurück-Sperre (Stichfahrten)
     no_backtrack: bool=True       # harte Regel: keine Straße doppelt/in Gegenrichtung, keine Wende, Wegpunkt wird durchfahren
     leg_limit_mult: float=5.0     # Suchradius je Bein (Vielfaches der Baumkosten Start->fernster Wegpunkt)

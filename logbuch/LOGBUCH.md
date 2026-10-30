@@ -297,29 +297,12 @@ Mainbullau und Windischbuchener Steige sind in beiden Ständen nur teilweise ent
 - Bewertung: Ortsdurchfahrt deutlich besser, aber Vielfalt deutlich schlechter (−78 % gültige Runden, −24 % Vertreter). Deshalb kein Nav-Bau und kein Upload; Standard bleibt 1.0, Caches zurückgespielt.
 - Behoben: `api.find_loops(max_results=…)` ohne `n` stürzte ab. Neu: phase3/qa_katalog.py. pytest 23/23 grün.
 
-## 2026-10-30, 14:08 – 0.6.6 umgesetzt (Code, kein Release)
+## 2026-10-30, 15:02 – town_minor_mult 1,5 / 2 / 2,5 getestet und Blob-Status geprüft (nichts hochgeladen)
 
-Freigabe Stefan 13:53 für alle Vorschläge aus der Analyse. versionCode 15 / 0.6.6 im Code, **kein Release, kein OTA**.
-- **Schnitt/Max:** `TripMath.stats` rechnet dt als Double, ignoriert Segmentbrüche; Strecke zählt nur bei ≥ 5 km/h zur Fahrzeit. Max = Median über 3 Fixes, gedeckelt durch Strecke/Zeit (×1,25 + 2 m/s).
-- **Ansagen:** NavSpeech nur noch QUEUE_FLUSH über `SpeechGate`; Schrittsprünge werden gebündelt, nur die aktuelle Ansage kommt, Ansagen > 5 s alt fallen weg.
-- **OffRouteMonitor:** Vorwärtsfenster max. 2 km; Fortschritt nur, wenn der Kurs zur Runde passt (≤ 120°). Abkürzungen weiter über 3 konsistente Fixes.
-- **Falschfahrt:** `WrongWayDetector` (> 120°, ≥ 3 Fixes, ≥ 150 m, ≤ 40 m neben der Runde). Ansage + Dialog „Umdrehen“ / „Runde andersherum fahren“ (`ReverseLoop`, Valhalla break/through).
-- **g-Werte:** Live-Anzeige aus VehicleFrame (1-s-Werte), Maxima nur, wenn ≥ 2 Fixes in Folge gehalten; Längs-g gegen GPS-dv/dt (≤ 0,25 g), vor Kalibrierung kein Längs-Max; P99 in der Fahrtansicht.
-- **Fehlerbericht (ZIP):** GPX mit acc/bearing/yaw/gPeak, CSV, navlog.jsonl (14 Tage), optional 50-Hz-Rohdaten (Schalter in den Einstellungen, standardmäßig aus, 3 Tage).
-- **navsim:** neues Szenario `runde_rueckwaerts` (Falschfahrt binnen 20 s erkannt, kein Fortschrittssprung); alle 40 Szenarien mit „after“ grün, Ergebnis in tools/navsim/ergebnis-0.6.6.csv. App-Logik dort nachgezogen (2-km-Fenster, Kursprüfung).
-- NavSyncTest.skipsMissedStepsAfterGap angepasst: nach 90-s-Lücke springt ein Einzel-Fix > 2 km nicht mehr, drei Vorwärts-Fixes schon.
-- Tests: shared jvm 121, androidHost 71, androidApp 146 grün; checkNoMaterialIcons und assembleRelease grün. Neu: Fixes066Test (18). Kein Gerätetest (kein KVM).
+Die drei Faktoren liefen über /workspace/kat_new/multi.sh komplett durch (enumerate bis qa_katalog.py). Danach wurden die Caches aus dem Backup zurückgespielt, und profiles.py steht wieder auf 1.0. Die Ergebnisse liegen in /workspace/kat_tm1.5, kat_tm2.0 und kat_tm2.5 (jeweils data/, qa.json, analyze.log). Mit 1,5 fällt der Anteil an Nebenstraßen im Ort von 8,8 % auf 6,4 %, mit 2 auf 6,1 % und mit 2,5 auf 3,9 %. In Eichenbühl sind es 21,8 %, 21,7 % und 0 %. Die Zahl der Katalogrunden sinkt von 342 auf 340, 335 und 319, die der Familienvertreter von 107 auf 94, 89 und 83. Windischbuchen–Wenschdorf hat dabei 49, 38 und 35 Runden. Die Überlappung bleibt bei höchstens 0,004, alle Runden liegen zwischen 45 und 60 min. Die Zahl „gültig“ aus analyze.log ist mit dem älteren Stand von 1306 nicht direkt vergleichbar, weil die aktuellen Läufe nur rund 7800 Kandidaten aufzählen. Der Blob-Store antwortet um 15:02 lesend wieder normal: grid/v1/index.json und routing/miltenberg-car-v1.tar.gz liefern 200. Ob Schreiben wieder geht, wurde nicht getestet. Über die Vercel-API ist unter dem Team kein Store mit der ID aus der Blob-Subdomain zu finden (404).
 
-## 2026-10-30, 14:12 – Release 0.6.6 veröffentlicht
+## 2026-10-30, 15:15 – Katalog mit town_minor_mult 2,5 übernommen, alte APK im Blob nicht gelöscht
 
-Freigabe Stefan 14:10. Release-APK aus 3423880 (versionCode 15 / 0.6.6), signiert mit dem bekannten Zertifikat 538baaec…35d7, SHA-256 416bbe72a407211d56c78df13a86c52337ae03c22b915a30506de13c1a2e78d2, 109223495 Byte.
-- GitHub: https://github.com/stef-web-del/Scenic-drive-/releases/tag/v0.6.6, einziges Asset scenic-routes-0.6.6.apk, Digest stimmt, als neuestes Release markiert.
-- Download-Seite: Deployment dpl_6Lp1aHxrRR2UJUMod3tXYQT6PY4T, statisch (index.html, version.json 15 / 0.6.6, vercel.json mit 307 /app.apk → Asset), ohne Blob/Functions.
-- Live-Check 14:12: /app.apk → 307 → GitHub → 200 application/vnd.android.package-archive, SHA-256 identisch. v0.6.5 und v0.6.4 laden weiter.
+Stefan hat 2,5 gewählt und will alte Versionen immer gelöscht haben (pt109u). Der Standard in profiles.py steht jetzt auf 2,5. Übernommen ist der Testkatalog aus /workspace/kat_tm2.5. Das Backup des alten Stands liegt in /workspace/backup_scenic_3010_vor_katalog_town und stimmte vor der Übernahme mit den Live-Dateien überein. build_nav.py hat für alle 319 Runden Navigationsdateien erzeugt. Fehlgeschlagen ist keine, die Übereinstimmung liegt bei mindestens 0,991 (Median 1,0), zusammen sind es 45 MB. build_assets.py hat loops.json für die App und catalog.json geschrieben (3,3 MB). qa_katalog.py liefert auf den produktiven Daten dasselbe Ergebnis wie im Test: 319 Runden mit 83 Familienvertretern, alle zwischen 45 und 60 min ab OBI. Es gibt 0 m unbefestigte Wege, die Überlappung liegt bei höchstens 0,004, Nebenstraßen im Ort machen 3,9 % aus und in Eichenbühl 0 %. pytest lief mit 23/23 grün durch. In phase3/cache sind char_all.pkl und parts.pkl noch auf dem Stand von 1.0, nur routes_all.pkl stammt aus dem 2,5-Lauf.
 
-## 2026-10-30 14:40 – Analyse Testfahrt (Debug-Export 0.6.6)
-- Export aus App 0.6.6, Fahrt aufgezeichnet 12:37–13:33 (vor 0.6.6-Release → vermutlich mit 0.6.5). navlog.jsonl leer, keine 50-Hz-Rohdaten.
-- Datenqualität sehr gut: 3160 Fixes/55 min (95 % 1 Hz), eine Lücke 3,6 s, Genauigkeit P50 2,2 m / P99 6 m.
-- 48,4 km, 53,8 min Fahrzeit, Ø 54 km/h, vmax 104 km/h; quer-g P95 0,22 / P99 0,29 / max gehalten 0,36; Bremsen P95 0,09 g.
-- Schleife 1547 (entgegen Katalogrichtung), 87 % des Tracks auf der Schleife, 79 % der Schleife abgefahren.
-- Analyse-Skript: app/tools/fahrtanalyse/analyse_fahrt.py (keine Rohdaten/Track im Repo; Daten liegen nur auf der Box).
+Im Blob liegt als einzige APK noch scenic-routes-m7.apk mit 127 MB. version.json und /app.apk verweisen auf das GitHub-Asset v0.6.6 und nicht auf diese Datei. Löschen konnte ich sie nicht. Es gibt kein Werkzeug mit Schreibrecht auf den Blob, und früher lief das über eine kurzzeitig deployte Funktion, die ich ohne eigene Freigabe nicht wieder aufgesetzt habe. Ob der Blob wieder Schreiben zulässt, ist deshalb ungeprüft. Den Katalog habe ich auch nicht in den Blob hochgeladen, er liegt nur lokal bereit. Ein Skript, das APKs in den Blob lädt, gibt es im Repo nicht. In docs/release.md steht jetzt der Aufräumschritt.
