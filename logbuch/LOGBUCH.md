@@ -316,3 +316,10 @@ Freigabe Stefan 14:10. Release-APK aus 3423880 (versionCode 15 / 0.6.6), signier
 - GitHub: https://github.com/stef-web-del/Scenic-drive-/releases/tag/v0.6.6, einziges Asset scenic-routes-0.6.6.apk, Digest stimmt, als neuestes Release markiert.
 - Download-Seite: Deployment dpl_6Lp1aHxrRR2UJUMod3tXYQT6PY4T, statisch (index.html, version.json 15 / 0.6.6, vercel.json mit 307 /app.apk → Asset), ohne Blob/Functions.
 - Live-Check 14:12: /app.apk → 307 → GitHub → 200 application/vnd.android.package-archive, SHA-256 identisch. v0.6.5 und v0.6.4 laden weiter.
+
+## 2026-10-30 14:40 – Analyse Testfahrt (Debug-Export 0.6.6)
+- Export aus App 0.6.6, Fahrt aufgezeichnet 12:37–13:33 (vor 0.6.6-Release → vermutlich mit 0.6.5). navlog.jsonl leer, keine 50-Hz-Rohdaten.
+- Datenqualität sehr gut: 3160 Fixes/55 min (95 % 1 Hz), eine Lücke 3,6 s, Genauigkeit P50 2,2 m / P99 6 m.
+- 48,4 km, 53,8 min Fahrzeit, Ø 54 km/h, vmax 104 km/h; quer-g P95 0,22 / P99 0,29 / max gehalten 0,36; Bremsen P95 0,09 g.
+- Schleife 1547 (entgegen Katalogrichtung), 87 % des Tracks auf der Schleife, 79 % der Schleife abgefahren.
+- Analyse-Skript: app/tools/fahrtanalyse/analyse_fahrt.py (keine Rohdaten/Track im Repo; Daten liegen nur auf der Box).
