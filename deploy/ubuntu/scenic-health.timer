@@ -1,0 +1,9 @@
+[Unit]
+Description=Scenic Routes – Healthcheck alle 5 Minuten
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target

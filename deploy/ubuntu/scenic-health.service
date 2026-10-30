@@ -1,0 +1,6 @@
+[Unit]
+Description=Scenic Routes – Healthcheck (startet hängende Dienste neu)
+
+[Service]
+Type=oneshot
+ExecStart=/srv/scenic/app/deploy/ubuntu/healthcheck.sh --restart

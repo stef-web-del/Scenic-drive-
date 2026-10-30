@@ -3,7 +3,8 @@
  {"op":"nav","id":..,"coords":[[lon,lat],..],"name":".."} -> Ferrostar/OSRM-Dokument (wie generate_nav.py, nur diese eine Runde)"""
 import json,sys,os
 OUT=os.fdopen(os.dup(1),"w"); os.dup2(2,1); sys.stdout=sys.stderr   # Valhalla-Logs nicht in den Antwortkanal
-sys.path.insert(0,'/workspace/scenic/phase3'); sys.path.insert(0,'/workspace/scenic/app/server')
+_SR=os.environ.get('SCENIC_ROOT') or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0,f'{_SR}/phase3'); sys.path.insert(0,f'{_SR}/app/server')
 import navpoints as NPJ
 from multiprocessing import Pool
 from osrm_merge import merge

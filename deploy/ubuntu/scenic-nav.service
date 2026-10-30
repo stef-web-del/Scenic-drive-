@@ -1,0 +1,23 @@
+[Unit]
+Description=Scenic Routes – Navigationsserver (Valhalla, /route /trace_route /locate /height /scenic/*)
+After=network-online.target
+
+[Service]
+User=scenic
+Group=scenic
+EnvironmentFile=/etc/scenic/scenic.env
+WorkingDirectory=/srv/scenic/app/server/vercel-navserver
+ExecStartPre=/bin/mkdir -p /var/lib/scenic/nav
+ExecStart=/srv/scenic/app/vh/bin/python api/index.py
+Restart=always
+RestartSec=5
+MemoryHigh=500M
+MemoryMax=700M
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/lib/scenic
+
+[Install]
+WantedBy=multi-user.target

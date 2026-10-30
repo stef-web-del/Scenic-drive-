@@ -16,9 +16,14 @@ def prep_tiles(src=f'{ROOT}/tiles',dst='/tmp/tiles'):
                 with open(f"{o}/{f.split('.part')[0]}",'ab') as w: w.write(open(f'{d}/{f}','rb').read())
             elif not os.path.exists(f'{o}/{f}'): os.symlink(f'{d}/{f}',f'{o}/{f}')
     open(dst+'/.ok','w').close(); return dst
-cfg=json.load(open(f'{HERE}/valhalla.json')); cfg['mjolnir']['tile_dir']=prep_tiles()
-open('/tmp/valhalla.json','w').write(json.dumps(cfg))
-actor=valhalla.Actor('/tmp/valhalla.json'); lock=threading.Lock()
+# Selbst-Hosting (deploy/ubuntu): SCENIC_NAV_TILE_DIR = fertiges Kachelverzeichnis (ohne .part-Zusammensetzen),
+# SCENIC_NAV_CACHE = mjolnir.max_cache_size in Bytes, SCENIC_NAV_TMP = Arbeitsverzeichnis. Ohne Variablen: Verhalten wie auf Vercel.
+_TMP=os.environ.get('SCENIC_NAV_TMP','/tmp')
+cfg=json.load(open(f'{HERE}/valhalla.json'))
+cfg['mjolnir']['tile_dir']=os.environ.get('SCENIC_NAV_TILE_DIR') or prep_tiles(dst=f'{_TMP}/tiles')
+if os.environ.get('SCENIC_NAV_CACHE'): cfg['mjolnir']['max_cache_size']=int(os.environ['SCENIC_NAV_CACHE'])
+open(f'{_TMP}/valhalla.json','w').write(json.dumps(cfg))
+actor=valhalla.Actor(f'{_TMP}/valhalla.json'); lock=threading.Lock()
 LOOPS={int(k):v for k,v in json.load(open(f'{ROOT}/data/loops.json')).items()}
 INIT_S=round(time.time()-T0,2)
 NAV={'costing':'auto','format':'osrm','banner_instructions':True,'voice_instructions':True,'language':'de-DE','units':'kilometers'}
@@ -117,3 +122,7 @@ class handler(BaseHTTPRequestHandler):
             if p in('/route','/trace_route','/locate','/height'): return self._send(200,call(p[1:],q))
             self._send(404,{'error':'not found'})
         except Exception as e: self._send(400,{'error':str(e)})
+
+if __name__=='__main__':  # Selbst-Hosting ohne Vercel: python api/index.py  (SCENIC_NAV_HOST/SCENIC_NAV_PORT)
+    from http.server import ThreadingHTTPServer
+    ThreadingHTTPServer((os.environ.get('SCENIC_NAV_HOST','127.0.0.1'),int(os.environ.get('SCENIC_NAV_PORT','8002'))),handler).serve_forever()

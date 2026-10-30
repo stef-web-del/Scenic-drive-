@@ -23,7 +23,7 @@ from pyproj import Transformer
 from shapely.geometry import LineString
 from shapely.ops import transform as shp_tr
 from shapely.geometry import Point as Point_
-ZIEL=(35.0,50.0); VIA_M=2000; SELF_OV_M=1000; KAL=0.864; OV=0.25; PAGE=6; MAX_LOOPS=12; REPAIR_TOP=3000; CHUNK=24; PROCS=6; TIME_BUDGET=90
+ZIEL=(35.0,50.0); VIA_M=2000; SELF_OV_M=1000; KAL=0.864; OV=0.25; PAGE=6; MAX_LOOPS=12; REPAIR_TOP=3000; CHUNK=24; PROCS=int(os.environ.get('SCENIC_PROCS','6')); TIME_BUDGET=90
 # Anfahrt und Rückweg auf derselben Straße (außerhalb des Startbereichs): abwerten ab AR_SOFT, aussortieren ab AR_HARD,
 # aber nur, wenn schon AR_KEEP Runden stehen. So gehen schwierige Startpunkte (Obernburg) nicht leer aus.
 AR_SOFT=0.3; AR_HARD=0.6; AR_PEN=0.6; AR_KEEP=3; AR_ZONE_M=1500

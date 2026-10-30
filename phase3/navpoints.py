@@ -3,10 +3,11 @@
 Algorithmus: scenic/navpoints.py. Router-Proxy: Valhalla lokal, costing auto, Zwischenziele als 'break' (wie Stopps in Google/Apple)."""
 import json, sys, os, math, time
 from multiprocessing import Pool
-sys.path.insert(0, '/workspace/scenic')
+_SR=os.environ.get('SCENIC_ROOT') or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _SR)
 import importlib.util
-spec = importlib.util.spec_from_file_location('navpoints', '/workspace/scenic/scenic/navpoints.py'); NP = importlib.util.module_from_spec(spec); spec.loader.exec_module(NP)
-RAW = '/workspace/scenic/phase3/out/web_raw'; CFG = '/workspace/scenic/valhalla/valhalla.json'
+spec = importlib.util.spec_from_file_location('navpoints', f'{_SR}/scenic/navpoints.py'); NP = importlib.util.module_from_spec(spec); spec.loader.exec_module(NP)
+RAW = f'{_SR}/phase3/out/web_raw'; CFG = os.environ.get('SCENIC_VALHALLA_CONFIG', f'{_SR}/valhalla/valhalla.json')
 A = None
 def decode6(s):
     out = []; i = la = lo = 0

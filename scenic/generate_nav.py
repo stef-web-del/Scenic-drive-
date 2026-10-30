@@ -4,7 +4,7 @@
 -> <out>/nav/v1/<id>.json + index.json (Ferrostar/OSRM-JSON de-DE, gleiches Format wie app/tools/build_nav.py)"""
 import json,os,sys,glob,hashlib,math,time,numpy as np
 from multiprocessing import Pool
-ROOT='/workspace/scenic'; sys.path.insert(0,f'{ROOT}/phase3'); sys.path.insert(0,f'{ROOT}/app/server')
+ROOT=os.environ.get('SCENIC_ROOT') or os.path.dirname(os.path.dirname(os.path.abspath(__file__))); sys.path.insert(0,f'{ROOT}/phase3'); sys.path.insert(0,f'{ROOT}/app/server')
 import navpoints as NPJ   # phase3/navpoints.py: route(), edges_s(), init(), NP
 from osrm_merge import merge
 from scipy.spatial import cKDTree

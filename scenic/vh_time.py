@@ -1,9 +1,10 @@
 """Valhalla-Fahrzeit für Rundenkandidaten (läuft im Valhalla-venv vh/), gleiche Map-Matching-Einstellung wie die Navi-Dateien
 (generate_nav.ferro, interpolation 10 m), damit die angezeigte Dauer der Navi-Dauer entspricht.
   vh/bin/python scenic/vh_time.py in.json out.json   in: {id: [[lon,lat],...]}  out: {id: Minuten|null}"""
-import json,sys
+import json,sys,os
 from multiprocessing import Pool
-sys.path.insert(0,'/workspace/scenic/phase3')
+_SR=os.environ.get('SCENIC_ROOT') or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0,f'{_SR}/phase3')
 import navpoints as NPJ
 def job(it):
     i,g=it

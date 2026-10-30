@@ -1,0 +1,26 @@
+[Unit]
+Description=Scenic Routes – freie Rundensuche (/jobs)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=scenic
+Group=scenic
+EnvironmentFile=/etc/scenic/scenic.env
+WorkingDirectory=/srv/scenic/app
+ExecStart=/srv/scenic/app/venv/bin/python -W ignore -m server.server
+Restart=always
+RestartSec=5
+# 4-GB-Server: harte Grenze inkl. Kindprozesse; gemessen Spitze ~2,1 GB (PROCS=3)
+MemoryHigh=2600M
+MemoryMax=3000M
+TasksMax=200
+Nice=5
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/lib/scenic
+
+[Install]
+WantedBy=multi-user.target
