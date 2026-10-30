@@ -35,22 +35,48 @@ object TripMath {
         return out
     }
 
+    /**
+     * Kennzahlen. 0.6.6: dt als Double (vorher ganze Sekunden: Fixes mit 999 ms Abstand zählten 0 s Fahrzeit,
+     * die Strecke aber voll → Schnitt bis ~2× zu hoch). Schnitt = Strecke IN BEWEGUNG / Fahrzeit.
+     * Max = Median über 3 Fixes, plausibilisiert gegen Weg/Zeit (ein einzelner Doppler-Ausreißer zählt nicht).
+     */
     fun stats(raw: List<TrackPoint>, movingKmh: Double = 5.0, pauseS: Long = 120): TripStats {
         val pts = clean(raw)
         if (pts.size < 2) return TripStats(0.0, 0, 0, 0.0, 0.0, 0)
-        var dist = 0.0; var moving = 0L; var maxV = 0.0; var pauses = 0; var still = 0L
+        var dist = 0.0; var movDist = 0.0; var moving = 0.0; var pauses = 0; var still = 0.0
+        val v = DoubleArray(pts.size) { -1.0 }; val vPos = DoubleArray(pts.size) { -1.0 }
         for (i in 1 until pts.size) {
             val a = pts[i - 1]; val b = pts[i]
             if (a.seg != b.seg) continue // Pause: weder Strecke noch Fahrzeit
-            val d = Geo.distanceM(a.latLon, b.latLon); val dt = (b.timeMs - a.timeMs) / 1000
-            val v = b.speedMps ?: if (dt > 0) d / dt else 0.0
+            val d = Geo.distanceM(a.latLon, b.latLon); val dt = (b.timeMs - a.timeMs) / 1000.0
+            val pos = if (dt > 0) d / dt else 0.0
+            val vi = b.speedMps ?: pos
+            v[i] = vi; vPos[i] = pos
             dist += d
-            if (v * 3.6 >= movingKmh) { moving += dt; if (still >= pauseS) pauses++; still = 0 } else still += dt
-            maxV = maxOf(maxV, v)
+            if (vi * 3.6 >= movingKmh) { moving += dt; movDist += d; if (still >= pauseS) pauses++; still = 0.0 } else still += dt
         }
+        val maxV = maxSpeed(pts, v, vPos)
         val dur = pts.groupBy { it.seg }.values.sumOf { (it.last().timeMs - it.first().timeMs) / 1000 }
-        return TripStats(dist, dur, moving, maxV * 3.6, if (moving > 0) dist / moving * 3.6 else 0.0, pauses)
+        return TripStats(dist, dur, moving.toLong(), maxV * 3.6, if (moving > 0) movDist / moving * 3.6 else 0.0, pauses)
     }
+
+    /** Median über 3 aufeinanderfolgende Fixes desselben Abschnitts; höchstens Weg/Zeit-Median × 1,25 + 2 m/s. */
+    internal fun maxSpeed(pts: List<TrackPoint>, v: DoubleArray, vPos: DoubleArray): Double {
+        var best = 0.0
+        for (i in 2 until pts.size) {
+            if (pts[i - 2].seg != pts[i].seg || v[i - 1] < 0 || v[i] < 0 || v[i - 2] < 0) continue
+            if (pts[i - 2].seg != pts[i - 1].seg) continue
+            val m = med3(v[i - 2], v[i - 1], v[i])
+            // Weg/Zeit über die drei Fixes (robuster als einzelne Abschnitte).
+            val dt = (pts[i].timeMs - pts[i - 2].timeMs) / 1000.0
+            val wz = if (dt > 0) (Geo.distanceM(pts[i - 2].latLon, pts[i - 1].latLon) + Geo.distanceM(pts[i - 1].latLon, pts[i].latLon)) / dt else m
+            val cap = maxOf(med3(vPos[i - 2].coerceAtLeast(0.0), vPos[i - 1], vPos[i]), wz) * 1.25 + 2.0
+            best = maxOf(best, minOf(m, cap))
+        }
+        if (best == 0.0) for (i in v.indices) if (v[i] > best && v[i] < 70) best = v[i] // < 3 Fixes: Fallback
+        return best
+    }
+    private fun med3(a: Double, b: Double, c: Double) = maxOf(minOf(a, b), minOf(maxOf(a, b), c))
 
     /**
      * Gefahrene Segmente einer Runde: Runde in [binM]-Abschnitte teilen, Abschnitt gilt als gefahren,
@@ -83,11 +109,15 @@ object Gpx {
             append("""<trkpt lat="${p.lat}" lon="${p.lon}">""")
             p.altM?.let { append("<ele>").append(it).append("</ele>") }
             append("<time>").append(isoTime(p.timeMs)).append("</time>")
-            if (p.speedMps != null || p.lonG != null || p.latG != null) {
+            if (p.speedMps != null || p.lonG != null || p.latG != null || p.accuracyM != null || p.bearingDeg != null || p.yawDps != null || p.gPeak != null) {
                 append("<extensions>")
                 p.speedMps?.let { append("<speed>").append(it).append("</speed>") }
+                p.accuracyM?.let { append("<sr:acc>").append(r3(it)).append("</sr:acc>") }
+                p.bearingDeg?.let { append("<sr:bearing>").append(r3(it)).append("</sr:bearing>") }
                 p.lonG?.let { append("<sr:lonG>").append(r3(it)).append("</sr:lonG>") }
                 p.latG?.let { append("<sr:latG>").append(r3(it)).append("</sr:latG>") }
+                p.yawDps?.let { append("<sr:yaw>").append(r3(it)).append("</sr:yaw>") }
+                p.gPeak?.let { append("<sr:gPeak>").append(r3(it)).append("</sr:gPeak>") }
                 append("</extensions>")
             }
             append("</trkpt>\n")

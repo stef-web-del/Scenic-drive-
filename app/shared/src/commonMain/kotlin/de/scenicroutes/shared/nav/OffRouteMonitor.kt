@@ -1,5 +1,6 @@
 package de.scenicroutes.shared.nav
 
+import de.scenicroutes.shared.geo.Geo
 import de.scenicroutes.shared.geo.Polyline
 import de.scenicroutes.shared.model.LatLon
 
@@ -18,6 +19,11 @@ class OffRouteMonitor(
     private val maxJumpBaseM: Double = 300.0,
     private val maxSpeedMps: Double = 70.0,
     private val firstPenaltyM: Double = 60.0,
+    /** 0.6.6: Obergrenze des Vorwärtsfensters. Vorher wuchs es mit 70 m/s × Zeit ohne Treffer unbegrenzt –
+     *  beim Rückwärtsfahren wurde nach Minuten ein Fix weit hinten „regulär“ übernommen (Ansagen-Schwall). */
+    private val maxWindowM: Double = 2_000.0,
+    /** Kursdifferenz, ab der ein Fix nicht als Fortschritt zählt (Gegenrichtung). */
+    private val wrongWayDeg: Double = 120.0,
 ) {
     var armed = armed; private set
     enum class State { ON_LOOP, OFF_LOOP }
@@ -36,15 +42,19 @@ class OffRouteMonitor(
      *   verrauschter Fix am Start (Start = Ziel) oder an einer Stelle, wo sich die Runde selbst kreuzt,
      *   auf dem falschen Abschnitt – und die Navigation „springt“ ans Ende. Der erste Treffer bevorzugt
      *   stark den Anfang ([firstPenaltyM]), findet aber einen Einstieg mitten in der Runde.
+     * @param headingDeg Fahrtrichtung (GPS-Kurs, nur bei Fahrt). Weicht sie > [wrongWayDeg] von der Richtung
+     *   der Runde an dieser Stelle ab, zählt der Fix nicht als Fortschritt (Gegenrichtung).
      * @return true, wenn sich der Zustand geändert hat.
      */
-    fun update(p: LatLon, nowMs: Long? = null): Boolean {
+    fun update(p: LatLon, nowMs: Long? = null, headingDeg: Double? = null): Boolean {
         val first = nowMs != null && lastHitMs == null
         val pr = if (first) loop.project(p, hintAlongM = 0.0, penaltyM = firstPenaltyM) else loop.project(p, hintAlongM = progressM)
         if (!armed) { if (pr.distanceM < rejoinM && pr.alongM < 500) armed = true else return false }
         val last = lastHitMs
-        val maxJump = if (nowMs == null || last == null) Double.POSITIVE_INFINITY else maxJumpBaseM + maxSpeedMps * (nowMs - last) / 1000.0
-        if (pr.distanceM < rejoinM && pr.alongM >= progressM - 200 && pr.alongM <= progressM + maxJump) {
+        val maxJump = if (nowMs == null || last == null) Double.POSITIVE_INFINITY else minOf(maxWindowM, maxJumpBaseM + maxSpeedMps * (nowMs - last) / 1000.0)
+        val against = headingDeg != null && headingDiff(headingDeg, loopBearingAt(pr.alongM)) > wrongWayDeg
+        if (against) pending = null
+        else if (pr.distanceM < rejoinM && pr.alongM >= progressM - 200 && pr.alongM <= progressM + maxJump) {
             progressM = maxOf(progressM, pr.alongM)
             if (nowMs != null) lastHitMs = nowMs
             pending = null
@@ -63,5 +73,11 @@ class OffRouteMonitor(
         }
         return before != state
     }
+    /** Richtung der Runde an Position [alongM] (Grad, über ±20 m gemittelt – robust gegen Mini-Segmente). */
+    fun loopBearingAt(alongM: Double): Double = Geo.bearingDeg(loop.pointAt(alongM - 20), loop.pointAt(alongM + 20))
+    fun project(p: LatLon) = loop.project(p, hintAlongM = progressM)
     fun distanceToLoop(p: LatLon) = loop.project(p, hintAlongM = progressM).distanceM
 }
+
+/** Kleinster Winkel zwischen zwei Kursen (0…180°). */
+fun headingDiff(a: Double, b: Double): Double { var d = (a - b) % 360.0; if (d < 0) d += 360.0; return if (d > 180) 360 - d else d }

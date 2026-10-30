@@ -30,7 +30,13 @@ class NavSpeech(ctx: Context, prefs: NavPrefs) : SpokenInstructionObserver {
     private var tts: TextToSpeech? = null
     private var engineInUse: String? = null
     @Volatile private var ready = false
-    private var pending: Pair<String, String>? = null
+    private val gate = de.scenicroutes.shared.nav.SpeechGate()
+    /** Ansagen in der TTS-Warteschlange (id → Ansage), um überalterte beim Start zu verwerfen. */
+    private val queued = java.util.concurrent.ConcurrentHashMap<String, de.scenicroutes.shared.nav.SpeechGate.Say>()
+    /** Aktueller Ferrostar-Schritt (setzt das NavViewModel). */
+    var stepIndex: () -> Int? = { null }
+    /** Protokoll-Haken: (Ereignis, Felder) – setzt das NavViewModel. */
+    var log: (String, Map<String, Any?>) -> Unit = { _, _ -> }
     private val _mute = MutableStateFlow(false)
     private val _ready = MutableStateFlow(false)
     /** true, sobald die TTS bereit ist (für Stimmenliste in den Einstellungen). */
@@ -47,12 +53,21 @@ class NavSpeech(ctx: Context, prefs: NavPrefs) : SpokenInstructionObserver {
         val listener = TextToSpeech.OnInitListener { status ->
             if (status == TextToSpeech.SUCCESS) {
                 ready = true; configure(); _ready.value = true
-                pending?.let { (t, id) -> pending = null; speak(t, id) }
+                gate.takePending(System.currentTimeMillis())?.let { say(it) }
             }
         }
         tts = (if (prefs.engine != null) TextToSpeech(app, listener, prefs.engine) else TextToSpeech(app, listener)).also {
             it.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                override fun onStart(id: String?) {}
+                override fun onStart(id: String?) {
+                    val q = id?.let { queued.remove(it) } ?: return
+                    val now = System.currentTimeMillis()
+                    if (!gate.fresh(q, now)) {
+                        // Überaltert (z. B. hinter einer langen Ansage gewartet): abbrechen, neueste frische nachsprechen.
+                        log("speech_drop_stale", mapOf("text" to q.text, "ageMs" to now - q.atMs))
+                        val next = queued.values.filter { gate.fresh(it, now) }.maxByOrNull { it.atMs }
+                        queued.clear(); tts?.stop(); next?.let { say(it.copy(flush = true)) }
+                    } else log("speech_spoken", mapOf("text" to q.text, "delayMs" to now - q.atMs))
+                }
                 override fun onDone(id: String?) = release()
                 @Deprecated("API") override fun onError(id: String?) = release()
                 override fun onError(id: String?, code: Int) = release()
@@ -81,20 +96,36 @@ class NavSpeech(ctx: Context, prefs: NavPrefs) : SpokenInstructionObserver {
 
     fun engines(): List<TextToSpeech.EngineInfo> = runCatching { tts?.engines.orEmpty() }.getOrDefault(emptyList())
 
-    fun speak(text: String, id: String) {
+    /** Direkt sprechen (Test-Ansage in den Einstellungen): ersetzt, was gerade läuft. */
+    fun speak(text: String, id: String) = say(de.scenicroutes.shared.nav.SpeechGate.Say(text, id, true, System.currentTimeMillis()))
+
+    private fun say(s: de.scenicroutes.shared.nav.SpeechGate.Say) {
         val t = tts
-        if (t == null || !ready) { pending = text to id; return }
+        if (t == null || !ready) { gate.hold(s); return }
         if (prefs.duck) am.requestAudioFocus(focus)
         val b = Bundle().apply { putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, prefs.volume) }
-        if (t.speak(text, TextToSpeech.QUEUE_ADD, b, id) != TextToSpeech.SUCCESS) release()
+        if (s.flush) queued.clear()
+        queued[s.id] = s
+        if (t.speak(s.text, if (s.flush) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD, b, s.id) != TextToSpeech.SUCCESS) { queued.remove(s.id); release() }
+    }
+
+    /** Mehrere Schritte werden gleich weitergeschaltet: nur die letzte Ansage sprechen. */
+    fun beginBatch() = gate.beginBatch()
+    fun endBatch() {
+        val before = gate.dropped
+        gate.endBatch()?.let { if (!isMuted) say(it) }
+        if (gate.dropped > before) log("speech_batch_dropped", mapOf("count" to gate.dropped - before))
     }
 
     private fun release() { if (tts?.isSpeaking != true) am.abandonAudioFocusRequest(focus) }
 
     override fun onSpokenInstructionTrigger(spokenInstruction: SpokenInstruction) {
-        if (!isMuted) speak(spokenInstruction.text, spokenInstruction.utteranceId.toString())
+        val now = System.currentTimeMillis(); val step = stepIndex()
+        log("speech_triggered", mapOf("text" to spokenInstruction.text, "step" to step))
+        if (isMuted) return
+        gate.offer(spokenInstruction.text, spokenInstruction.utteranceId.toString(), step, now)?.let { say(it) }
     }
-    override fun stopAndClearQueue() { pending = null; tts?.stop(); am.abandonAudioFocusRequest(focus) }
+    override fun stopAndClearQueue() { gate.clear(); queued.clear(); tts?.stop(); am.abandonAudioFocusRequest(focus) }
     override fun setMuted(isMuted: Boolean) { _mute.value = isMuted; if (isMuted) stopAndClearQueue() }
     override val muteState: StateFlow<Boolean> get() = _mute
 

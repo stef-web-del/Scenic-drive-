@@ -271,3 +271,28 @@ Stefan hat E1 und E2 freigegeben. Die Navigation hält jetzt immer einen Vorderg
 
 **Release:** versionCode 14, Commit b5cf68b, https://github.com/stef-web-del/Scenic-drive-/releases/tag/v0.6.5, SHA-256 370ad95339f00fe1e590c7d6a1e7a4a1af5b987abb2f9700c46304d2b3c17e72. Download-Seite dpl_6JGHrTUwhhQpYFecVAiN71khW1gN, /app.apk geprüft. Navserver nicht neu deployt.
 - Nebenbefund: `api.find_loops(max_results=…)` stürzt ab, wenn `n` None ist (nicht behoben).
+
+## 2026-10-30 – Analyse nach Stefans erster Fahrt mit 0.6.4 (nur Analyse, kein Code geändert)
+
+Stefan berichtete von einer langen Stille, dann rund 20 Ansagen am Stück und danach nichts mehr. Dazu einem Schnitt nahe am Maximum und g-Werten, denen er nicht traut. Die Stille-und-Schwall-Folge lässt sich mit dem Code erklären, wenn er die Runde gegen die Richtung gefahren ist. Der OffRouteMonitor hält den Fortschritt monoton. Das Fenster nach vorn wächst mit 70 m/s mal der Zeit seit dem letzten Treffer, also praktisch ohne Grenze. Irgendwann wird deshalb ein Fix weit hinten auf der Runde als regulärer Treffer akzeptiert. StepSync schaltet dann in einem Rutsch alle Schritte weiter, und NavSpeech hängt jede Ansage mit QUEUE_ADD an, ohne zu prüfen, ob sie noch aktuell ist. Danach liegt jede Rückwärtsposition mehr als 200 m hinter dem Fortschritt, und es bleibt still. Die Änderungen in 0.6.5 erfassen das nicht, weil man ja auf der Runde ist. Der Schnitt ist aus einem echten Fehler zu hoch: In TripMath.stats wird dt als ganze Sekunden gerechnet. Bei Fixes im Abstand von ungefähr 1 s, die etwas unter 1000 ms liegen, fällt Fahrzeit weg, die Strecke aber nicht. Die g-Maxima sind Maxima aus Sekundenmitteln ohne Ausreißerschutz; vor der Achsen-Kalibrierung stammt die Längsbeschleunigung aus dem GPS-dv/dt. Der Live-g-Messer in der Navigation ist eine eigene, ungefilterte Berechnung, und dort kommen die Schlagloch-Spitzen vor. Ein CSV-Export existiert bereits. Für die Fehlersuche fehlt ein Navigations-Ereignisprotokoll. Vorschläge und offene Fragen stehen im Bericht an Stefan.
+
+## 2026-10-30, 14:05 – Katalog mit town_minor_mult=4: erzeugt und geprüft, NICHT hochgeladen
+
+Freigabe Stefan 13:38 (t105s570). Backup: /workspace/backup_scenic_3010_vor_katalog_town/ (webapp data/nav/grid, App-Assets, phase3-Caches, grid-v1, Original-profiles/graph).
+- Blob-Store weiter gesperrt (403 „store is blocked“ für grid/v1, nav/v1, catalog.json). Upload unmöglich, Upload-Schnittstelle nicht eingeschaltet.
+- Pipeline enumerate → analyze → char_all → export_web → score_parts → compact neu mit 4.0, Ergebnis in /workspace/kat_new/ (live-Daten unverändert).
+
+| Kennzahl | vorher | nachher (4.0) |
+|---|---|---|
+| Kandidaten / gültige Runden | 18 413 / 1306 | 7398 / 293 |
+| Runden im Katalog / Familienvertreter | 342 / 107 | 293 / 81 |
+| Ø Tourwert | 0,356 | 0,353 |
+| Nebenstraßen innerorts | 8,8 % | 3,2 % |
+| Eichenbühl: Runden / Nebenstraßen im Ort | 206 / 32 % | 187 / 0 % |
+| Überlappung max. / unbefestigt (Summe) | 0,004 / 3009 m | 0,004 / 2905 m |
+| Collenberg–Mönchberg (Runden ≥80 %) | 29 | 25 |
+| Windischbuchen–Wenschdorf (Runden ≥80 %) | 55 | 33 |
+
+Mainbullau und Windischbuchener Steige sind in beiden Ständen nur teilweise enthalten (28 % / 40 %). OBI-Start mit 45–60 min: alle Runden.
+- Bewertung: Ortsdurchfahrt deutlich besser, aber Vielfalt deutlich schlechter (−78 % gültige Runden, −24 % Vertreter). Deshalb kein Nav-Bau und kein Upload; Standard bleibt 1.0, Caches zurückgespielt.
+- Behoben: `api.find_loops(max_results=…)` ohne `n` stürzte ab. Neu: phase3/qa_katalog.py. pytest 23/23 grün.

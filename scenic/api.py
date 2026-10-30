@@ -52,7 +52,7 @@ def find_loops(start,profile='auto_sport',max_results=10,diversity=None,max_comb
     E,RG,S,routes=evaluate_all(start,p,max_combos=max_combos,E_RG=(E,RG),repair_top=repair_top); T['search']=time.time()-t; t=time.time()
     ok=[r for r in routes if passes(r,p)]
     lab,reps=cluster(RG,ok,p.max_jaccard) if ok else ([],[]); T['cluster']=time.time()-t; t=time.time()
-    top=[ok[i] for i in reps[:max(n*3,10)]]
+    top=[ok[i] for i in reps[:max(max_results*3,10)]]
     if characterize:
         from .character import analyze
         for r in top: r['char']=analyze(RG,E,r)
