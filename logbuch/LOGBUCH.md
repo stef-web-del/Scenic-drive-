@@ -256,3 +256,18 @@ Ich habe Navigation und Aufzeichnung gegen die aktuelle Android-Doku geprüft (s
 
 ## 30.10.2026 – Navigation läuft im Hintergrund weiter
 Stefan hat E1 und E2 freigegeben. Die Navigation hält jetzt immer einen Vordergrunddienst: Ohne Aufzeichnung läuft der RecordingService im Modus „nur Navigation“, mit der Benachrichtigung „Navigation aktiv“ und der Aktion „Beenden“, und speichert nichts. Mit Aufzeichnung bleibt es bei einem einzigen Dienst. GPS und Ansagen laufen dadurch auch bei Bildschirm aus weiter. Der Bildschirm bleibt nur noch im Fahrmodus an, abschaltbar unter Karte & Ansicht. Das Wiederherstellen der Navigation nach einem Prozesstod bleibt offen, weil es nicht risikoarm ist. Alle Tests sind grün (androidApp 146, shared 148), Debug- und Release-Build bauen. Ein Release gab es nicht.
+
+## 2026-10-30, 13:05 – Release 0.6.5: Neuberechnung repariert, Ortsdurchfahrten analysiert
+
+**Neuberechnung (App-Bug, nicht Server):** Navserver /route antwortet in 0,5 s, 20/20 Live-Szenarien grün.
+- Anfahrt hatte keine Abweichungsbehandlung (OffRouteMonitor armed=false, Ferrostar DoNothing). Neu: `reapproach()`, höchstens alle 20 s.
+- Auf der Runde bekam der Monitor die von Ferrostar eingerastete Position. Ferrostar erkennt Abweichungen nur bei Genauigkeit ≤ 40 m und nur gegen den aktuellen Schritt, deshalb wurde keine Abweichung gemeldet. Neu: Rohposition (`TripState.Navigating.userLocation`); Fixes mit > 60 m Genauigkeit werden ignoriert.
+- Rückweg wurde nur einmal versucht. Neu: `OffRoutePolicy.retryDue()` versucht es alle 20 s erneut, bis ein Plan steht.
+- Tests: ReplanTest (4 neu); shared 156, androidApp 146 grün. Kein Gerätetest (kein KVM).
+
+**Ortsdurchfahrten (z. B. Eichenbühl), Ursache im Katalog-Generator:** `edge_score` wird im Ort für Haupt- und Nebenstraße 0, deshalb gewinnt der kürzere Weg. 206 Katalogrunden durch Eichenbühl, ~28 % der Ortsstrecke auf residential.
+- Neuer Parameter `Params.town_minor_mult` (Standard 1.0 = aus). Test mit 4.0: Nebenstraßen im Ort 15,4 % → 9,6 %, Ø-Tourwert 0,406 → 0,418, Überlappung ≤ 0,02.
+- Offen: mit 4.0 aktivieren und Katalog neu erzeugen (ca. 1–2 h). Wartet auf Stefans Entscheidung.
+
+**Release:** versionCode 14, Commit b5cf68b, https://github.com/stef-web-del/Scenic-drive-/releases/tag/v0.6.5, SHA-256 370ad95339f00fe1e590c7d6a1e7a4a1af5b987abb2f9700c46304d2b3c17e72. Download-Seite dpl_6JGHrTUwhhQpYFecVAiN71khW1gN, /app.apk geprüft. Navserver nicht neu deployt.
+- Nebenbefund: `api.find_loops(max_results=…)` stürzt ab, wenn `n` None ist (nicht behoben).
