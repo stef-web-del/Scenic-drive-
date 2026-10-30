@@ -102,6 +102,7 @@ fun MapSettings(s: Settings) {
         Chips("Ausrichtung", MapOrientation.entries.map { it.name to it.label }, p.orientation.name, "navOrient") { k -> s.updateNav { it.copy(orientation = MapOrientation.valueOf(k)) } }
         Chips("Zoom", NavZoom.entries.map { it.name to it.label }, p.zoom.name, "navZoom") { k -> s.updateNav { it.copy(zoom = NavZoom.valueOf(k)) } }
         Chips("Tag/Nacht", NavTheme.entries.map { it.name to it.label }, p.theme.name, "navTheme") { k -> s.updateNav { it.copy(theme = NavTheme.valueOf(k)) } }
+        Toggle("Bildschirm anlassen", "Während der Zielführung geht das Display nicht aus", p.keepScreenOn, "navKeepScreenOn") { v -> s.updateNav { it.copy(keepScreenOn = v) } }
     }
     Hint("Auto (Tempo): in der Stadt näher, auf schnellen Straßen weiter. Auto (Sonnenstand): dunkel nach Sonnenuntergang am Start der Runde.")
 }

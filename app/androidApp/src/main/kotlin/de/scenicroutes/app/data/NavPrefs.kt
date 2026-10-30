@@ -42,6 +42,8 @@ data class NavPrefs(
     val showElevation: Boolean = false,
     val showAscent: Boolean = false,
     val showG: Boolean = false,
+    /** Bildschirm im Fahrmodus (Zielführung/Anfahrt) anlassen. Seit 0.6.5, standardmäßig an. */
+    val keepScreenOn: Boolean = true,
 ) {
     companion object {
         const val RATE_MIN = 0.5f; const val RATE_MAX = 2.0f
@@ -57,6 +59,8 @@ data class NavPrefs(
         }
 
         fun zoomDelta(z: NavZoom, speedMps: Double?) = if (z == NavZoom.AUTO) autoZoomDelta(speedMps) else z.delta
+
+        fun keepAwake(p: NavPrefs, driving: Boolean) = driving && p.keepScreenOn
 
         fun dark(t: NavTheme, sunDark: Boolean) = when (t) { NavTheme.AUTO -> sunDark; NavTheme.LIGHT -> false; NavTheme.DARK -> true }
 
@@ -105,6 +109,7 @@ data class NavPrefs(
             showProgress = p.getBoolean("barProgress", true), // fehlt der Schlüssel (nie gesetzt), gilt der neue Standard
             showCurves = p.getBoolean("barCurves", false), showElevation = p.getBoolean("barElevation", false),
             showAscent = p.getBoolean("barAscent", false), showG = p.getBoolean("barG", false),
+            keepScreenOn = p.getBoolean("keepScreenOn", true),
         )
 
         fun write(p: SharedPreferences, n: NavPrefs) = p.edit {
@@ -112,7 +117,7 @@ data class NavPrefs(
             putFloat("navRate", n.rate); putFloat("navPitch", n.pitch); putFloat("navVolume", n.volume); putBoolean("navDuck", n.duck)
             putString("navOrient", n.orientation.name); putString("navZoom", n.zoom.name); putString("navTheme", n.theme.name)
             putBoolean("barEta", n.showEta); putBoolean("barKm", n.showKm); putBoolean("barMin", n.showMin); putBoolean("barSpeed", n.showSpeed); putBoolean("barProgress", n.showProgress)
-            putBoolean("barCurves", n.showCurves); putBoolean("barElevation", n.showElevation); putBoolean("barAscent", n.showAscent); putBoolean("barG", n.showG)
+            putBoolean("barCurves", n.showCurves); putBoolean("barElevation", n.showElevation); putBoolean("barAscent", n.showAscent); putBoolean("barG", n.showG); putBoolean("keepScreenOn", n.keepScreenOn)
         }
     }
 }

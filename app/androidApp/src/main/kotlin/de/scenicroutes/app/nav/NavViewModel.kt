@@ -417,12 +417,13 @@ class NavViewModel private constructor(
         locationProvider.disableSimulation()
         stopGuide()
         graph.activeLoopId.value = null
+        graph.navSession.value = null
         _extras.value = _extras.value.copy(started = false, phase = EntryPhase.NONE, entry = null, arrived = false, offMode = OffRoutePolicy.Mode.ON_LOOP)
     }
 
     fun consumeMessage() { _extras.value = _extras.value.copy(message = null) }
 
-    override fun onCleared() { stopGuide(); runCatching { core.stopNavigation() }; tts.shutdown(); super.onCleared() }
+    override fun onCleared() { graph.navSession.value = null; stopGuide(); runCatching { core.stopNavigation() }; tts.shutdown(); super.onCleared() }
 
     companion object {
         fun toRoute(b: RouteBundle): Route = Route.fromOsrm(NavJson.routeBytes(b), NavJson.waypointBytes(b), 6u)

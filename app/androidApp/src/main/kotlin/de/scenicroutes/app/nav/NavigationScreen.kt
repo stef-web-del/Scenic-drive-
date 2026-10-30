@@ -96,6 +96,10 @@ fun NavigationRoute(loop: Loop, onExit: () -> Unit) {
     LaunchedEffect(extras.started, guiding) {
         if ((extras.started || guiding) && granted && ctx.graph.settings.record) RecordingService.start(ctx, loop.id, loop.titleShort)
     }
+    // Zielführung hält immer einen Vordergrunddienst (bei Aufzeichnung derselbe Dienst): GPS + Ansagen auch bei Bildschirm aus.
+    LaunchedEffect(extras.started || guiding, granted) {
+        if ((extras.started || guiding) && granted) RecordingService.startNav(ctx, loop.titleShort) else RecordingService.endNav(ctx)
+    }
     val owner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     androidx.compose.runtime.DisposableEffect(owner) {
         val obs = androidx.lifecycle.LifecycleEventObserver { _, ev -> if (ev == androidx.lifecycle.Lifecycle.Event.ON_RESUME) vm.onResume() }
@@ -109,7 +113,9 @@ fun NavigationRoute(loop: Loop, onExit: () -> Unit) {
     // Ende/Abbruch: Navigation stoppen, dann „Fahrt speichern?“ (app-weites Sheet) – nichts geht verloren.
     fun stopAll() { vm.stop(); if (ctx.graph.recorder.state.value?.loopId == loop.id) ctx.graph.recorder.requestStop(); onExit() }
 
-    KeepScreenOnDisposableEffect()
+    // „Beenden“ in der Benachrichtigung (Modus nur Navigation) → Zielführung hier sauber stoppen.
+    val navSession by ctx.graph.navSession.collectAsState()
+    LaunchedEffect(navSession) { if (navSession == null && (extras.started || guiding)) stopAll() }
     // A10: System-Zurück im Fahrmodus fragt nach, statt die Zielführung still zu beenden.
     DriveBackGuard(active = extras.started || guiding, onStop = ::stopAll)
     // Fahrmodus: hell/dunkel nach Sonnenstand am Start der Runde, jede Minute neu geprüft.
@@ -119,6 +125,8 @@ fun NavigationRoute(loop: Loop, onExit: () -> Unit) {
     // Navi-Einstellungen (Einstellungen → Navigation); Standard = Verhalten von 0.6.0.
     val settings = ctx.graph.settings
     val prefs by settings.navFlow.collectAsState()
+    // Bildschirm nur im Fahrmodus anlassen (Einstellung „Bildschirm anlassen“, Standard an).
+    if (NavPrefs.keepAwake(prefs, extras.started || guiding)) KeepScreenOnDisposableEffect()
     val camBase = navigationCameraOptions(NavigationActivity.Automotive)
     val follow = if (prefs.orientation == MapOrientation.NORTH) NavigationCameraMode.FOLLOW_USER else NavigationCameraMode.FOLLOW_USER_WITH_BEARING
     val mapState = rememberNavigationMapState(follow, camBase)

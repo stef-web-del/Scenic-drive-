@@ -68,6 +68,8 @@ class AppGraph(private val ctx: Context) {
     val navLocations = MutableSharedFlow<TrackPoint>(extraBufferCapacity = 64)
     val simulating = MutableStateFlow(false)
     val activeLoopId = MutableStateFlow<Int?>(null)
+    /** Laufende Zielführung (Titel), null = keine. Hält den Vordergrunddienst im Modus „nur Navigation“. */
+    val navSession = MutableStateFlow<String?>(null)
 
     /** Benachrichtigung angetippt → Aufzeichnungs-Ansicht öffnen. */
     val openRecord = MutableStateFlow(false)
