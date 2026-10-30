@@ -1,0 +1,32 @@
+# Navigations-Simulation (Ferrostar-Kern + App-Logik) und Shared-Tests.
+# Bricht ab, sobald eine Runde in einem Szenario (Rauschen, Wald, Lücken 30–120 s, 2-km-Abweichung,
+# Rückkehr, Abkürzung, Einstieg mitten in der Runde, Ausreißer) ein veraltetes Banner > 20 s zeigt,
+# zu früh/nie ankommt oder abseits der Runde noch eine Anweisung anzeigt.
+name: nav-sim
+on:
+  push:
+    paths: ["shared/**", "androidApp/src/main/kotlin/de/scenicroutes/app/nav/**", "tools/navsim/**", ".github/workflows/nav-sim.yml"]
+  pull_request:
+  workflow_dispatch:
+jobs:
+  navsim:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: tools/navsim }
+      - name: Simulation (nur neue Konfiguration muss bestehen)
+        working-directory: tools/navsim
+        run: cargo run --release -- --config after --strict fixtures/*.json | tee navsim.csv
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: navsim, path: tools/navsim/navsim.csv }
+  shared-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "17" }
+      - uses: gradle/actions/setup-gradle@v4
+      - run: ./gradlew :shared:jvmTest

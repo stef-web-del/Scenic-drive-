@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="description" content="Interaktive Karte aller 1.306 kurvigen Auto-Runden (45–60 min) ab OBI Miltenberg – Filter, Höhenprofil, GPX." />
+    <meta name="theme-color" content="#ffffff" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://tiles.openfreemap.org" crossorigin />
+    <link rel="preload" href="/data/meta.json" as="fetch" crossorigin />
+    <title>Scenic Routes Miltenberg – Karte aller Runden</title>
+    <link rel="preload" as="image" href="/preview-light.webp" media="(prefers-color-scheme: light)" fetchpriority="high" />
+    <link rel="preload" as="image" href="/preview-dark.webp" media="(prefers-color-scheme: dark)" fetchpriority="high" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,14 @@
+diff --git a/node_modules/vaul/dist/index.mjs b/node_modules/vaul/dist/index.mjs
+index 0dbbce5..b40bf47 100644
+--- a/node_modules/vaul/dist/index.mjs
++++ b/node_modules/vaul/dist/index.mjs
+@@ -1349,7 +1349,8 @@ function Root({ open: openProp, onOpenChange, children, onDrag: onDragProp, onRe
+             }
+             setIsOpen(open);
+         },
+-        open: isOpen
++        open: isOpen,
++        modal: modal
+     }, /*#__PURE__*/ React__default.createElement(DrawerContext.Provider, {
+         value: {
+             activeSnapPoint,

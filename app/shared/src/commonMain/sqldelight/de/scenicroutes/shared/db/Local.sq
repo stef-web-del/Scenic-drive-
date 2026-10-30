@@ -1,0 +1,34 @@
+-- Lokales Profil (Konten vorbereitet): UUID, Zeitstempel und Löschflag je Datensatz -> später synchronisierbar.
+CREATE TABLE LocalProfile (
+  id TEXT NOT NULL PRIMARY KEY,
+  profile TEXT NOT NULL DEFAULT 'sportlich',
+  createdMs INTEGER NOT NULL,
+  updatedMs INTEGER NOT NULL,
+  deleted INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE DrivenLoop (
+  id TEXT NOT NULL PRIMARY KEY,
+  loopId INTEGER NOT NULL,
+  reversed INTEGER NOT NULL DEFAULT 0,
+  createdMs INTEGER NOT NULL,
+  updatedMs INTEGER NOT NULL,
+  deleted INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE LoopReport (
+  id TEXT NOT NULL PRIMARY KEY,
+  loopId INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  text TEXT NOT NULL,
+  createdMs INTEGER NOT NULL,
+  updatedMs INTEGER NOT NULL,
+  deleted INTEGER NOT NULL DEFAULT 0
+);
+
+profile: SELECT * FROM LocalProfile WHERE deleted = 0 LIMIT 1;
+insertProfile: INSERT INTO LocalProfile(id, profile, createdMs, updatedMs) VALUES (?, ?, ?, ?);
+setProfile: UPDATE LocalProfile SET profile = ?, updatedMs = ? WHERE id = ?;
+drivenActive: SELECT * FROM DrivenLoop WHERE deleted = 0;
+insertDriven: INSERT INTO DrivenLoop(id, loopId, reversed, createdMs, updatedMs) VALUES (?, ?, ?, ?, ?);
+markDrivenDeleted: UPDATE DrivenLoop SET deleted = 1, updatedMs = ? WHERE loopId = ? AND deleted = 0;
+insertReport: INSERT INTO LoopReport(id, loopId, kind, text, createdMs, updatedMs) VALUES (?, ?, ?, ?, ?, ?);
+reports: SELECT * FROM LoopReport WHERE deleted = 0 ORDER BY createdMs DESC;

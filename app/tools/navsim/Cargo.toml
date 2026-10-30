@@ -1,0 +1,9 @@
+[package]
+name = "navsim"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Gleiche Version wie die App (gradle/libs.versions.toml: ferrostar = 0.59.0)
+ferrostar = { git = "https://github.com/stadiamaps/ferrostar.git", tag = "0.59.0" }
+serde_json = "1"

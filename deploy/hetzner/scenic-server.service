@@ -1,0 +1,23 @@
+# systemd-Unit für Betrieb ohne Docker. Nur vorbereitet, nirgends installiert.
+# Ablage: /etc/systemd/system/scenic-server.service, Code unter /srv/scenic, Benutzer „scenic“.
+[Unit]
+Description=Scenic Routes Server (Runde ab Punkt)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=scenic
+WorkingDirectory=/srv/scenic
+EnvironmentFile=/etc/scenic/scenic.env
+ExecStart=/srv/scenic/venv/bin/python -W ignore -m server.server
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/scenic/phase3
+PrivateTmp=true
+MemoryMax=6G
+
+[Install]
+WantedBy=multi-user.target

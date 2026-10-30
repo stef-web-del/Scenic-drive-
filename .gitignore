@@ -1,0 +1,75 @@
+# Vorschlag – siehe docs/_repo-inhalt.md
+
+# Secrets und lokale Einstellungen
+keys/
+*.jks
+*.keystore
+keystore.properties
+local.properties
+.env
+.env.*
+!*.env.example
+
+# Python
+/venv/
+/vh/
+/tools/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Rohdaten und abgeleitete Daten
+/raw/
+/osm/
+/offline/
+/dem/
+/valhalla/
+/starts/
+phase3/cache/
+/bin/
+*.gpkg
+*.osm.pbf
+*.pbf
+*.tif
+*.vrt
+/overview.png
+*.log
+
+# Build- und Testausgaben
+build/
+.gradle/
+.kotlin/
+app/dist/
+app/tools/navsim/target/
+webapp/node_modules/
+webapp/dist/
+webapp/playwright-report/
+webapp/test-results/
+webapp/.lighthouseci/
+coverage/
+
+# Arbeitskopien und Sicherungen
+/app-navdebug/
+/backup_*/
+/backup_*.tgz
+
+# Screenshots, webapp/public/nav und deploy/index.html sind bewusst im Repo (Freigabe 30.10.2026)
+
+# Vercel-Navserver: generierte Kacheln und lokale Projektbindung
+server/vercel-navserver/tiles/
+.vercel/
+
+# Build-Artefakte
+*.apk
+*.aab
+*.tgz
+*.tar.gz
+*.zip
+*.osm.pbf
+*.keystore
+*.p12
+
+# Editor/OS
+.idea/
+.vscode/
+.DS_Store

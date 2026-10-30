@@ -1,0 +1,35 @@
+-- Migration 1 -> 2 (0.2.0-m2): Offline-Runden.
+-- Achtung: 0.4.0 hatte hier fälschlich die lokalen Tabellen eingetragen, ohne die Version zu erhöhen.
+-- Bestehende Geräte bekommen sie deshalb über 3.sqm; IF NOT EXISTS macht beides gefahrlos.
+CREATE TABLE IF NOT EXISTS OfflineLoop (
+  loopId INTEGER NOT NULL PRIMARY KEY,
+  navJson TEXT NOT NULL,
+  navSha TEXT NOT NULL,
+  savedMs INTEGER NOT NULL,
+  mapBytes INTEGER NOT NULL DEFAULT 0,
+  mapComplete INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS LocalProfile (
+  id TEXT NOT NULL PRIMARY KEY,
+  profile TEXT NOT NULL DEFAULT 'sportlich',
+  createdMs INTEGER NOT NULL,
+  updatedMs INTEGER NOT NULL,
+  deleted INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS DrivenLoop (
+  id TEXT NOT NULL PRIMARY KEY,
+  loopId INTEGER NOT NULL,
+  reversed INTEGER NOT NULL DEFAULT 0,
+  createdMs INTEGER NOT NULL,
+  updatedMs INTEGER NOT NULL,
+  deleted INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS LoopReport (
+  id TEXT NOT NULL PRIMARY KEY,
+  loopId INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  text TEXT NOT NULL,
+  createdMs INTEGER NOT NULL,
+  updatedMs INTEGER NOT NULL,
+  deleted INTEGER NOT NULL DEFAULT 0
+);

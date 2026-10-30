@@ -1,0 +1,26 @@
+# Kostenlos auf GitHub Actions (öffentliche Repos unbegrenzt, private 2000 min/Monat Free-Tier)
+name: Frontend-Tests
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Gleiches Image wie lokal → stabile Screenshot-Baselines
+    container: mcr.microsoft.com/playwright:v1.64.1-noble
+    env: { CI: "true", HOME: /root }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: npm }
+      - run: npm ci
+      - run: npm run test:all
+      - run: npm run test:lighthouse
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: berichte
+          path: |
+            playwright-report/
+            test-results/
+            coverage/
+            .lighthouseci/

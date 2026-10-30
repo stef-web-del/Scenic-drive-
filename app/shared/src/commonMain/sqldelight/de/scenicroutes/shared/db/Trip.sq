@@ -1,0 +1,57 @@
+-- Fahrten: lokal, sync-fähig (uuid, updatedMs, deleted). state: rec | paused | done
+CREATE TABLE Trip (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  loopId INTEGER,
+  title TEXT NOT NULL,
+  startedMs INTEGER NOT NULL,
+  endedMs INTEGER,
+  distanceM REAL,
+  maxKmh REAL,
+  avgKmh REAL,
+  loopCoverage REAL,
+  -- Community vorbereitet: lokal bis ausdrücklich geteilt
+  shared INTEGER NOT NULL DEFAULT 0,
+  uuid TEXT,
+  updatedMs INTEGER,
+  deleted INTEGER NOT NULL DEFAULT 0,
+  state TEXT NOT NULL DEFAULT 'done',
+  durationS INTEGER,
+  movingS INTEGER,
+  ascentM REAL,
+  descentM REAL,
+  maxLonG REAL,
+  maxLatG REAL,
+  curves INTEGER,
+  reversed INTEGER NOT NULL DEFAULT 0
+);
+-- 1 Zeile je GPS-Fix (1 Hz); Sensorwerte (25–50 Hz) sind je Sekunde verdichtet. seg = Abschnitt zwischen Pausen.
+CREATE TABLE TrackPoint (
+  tripId INTEGER NOT NULL,
+  timeMs INTEGER NOT NULL,
+  lat REAL NOT NULL,
+  lon REAL NOT NULL,
+  altM REAL,
+  speedMps REAL,
+  accuracyM REAL,
+  bearingDeg REAL,
+  lonG REAL,
+  latG REAL,
+  yawDps REAL,
+  gPeak REAL,
+  seg INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX tp_trip ON TrackPoint(tripId, timeMs);
+
+insertTrip: INSERT INTO Trip(loopId, title, startedMs, uuid, updatedMs, state, reversed) VALUES (?, ?, ?, ?, ?, 'rec', ?);
+lastId: SELECT last_insert_rowid();
+insertPoint: INSERT INTO TrackPoint VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+setState: UPDATE Trip SET state = ?, updatedMs = ? WHERE id = ?;
+finishTrip: UPDATE Trip SET endedMs = ?, distanceM = ?, maxKmh = ?, avgKmh = ?, loopCoverage = ?, durationS = ?, movingS = ?, ascentM = ?, descentM = ?, maxLonG = ?, maxLatG = ?, curves = ?, state = 'done', updatedMs = ? WHERE id = ?;
+rename: UPDATE Trip SET title = ?, updatedMs = ? WHERE id = ?;
+pointsForTrip: SELECT * FROM TrackPoint WHERE tripId = ? ORDER BY timeMs;
+pointCount: SELECT count(*) FROM TrackPoint WHERE tripId = ?;
+allTrips: SELECT * FROM Trip WHERE deleted = 0 AND state = 'done' ORDER BY startedMs DESC;
+unfinished: SELECT * FROM Trip WHERE deleted = 0 AND state != 'done' ORDER BY startedMs DESC;
+tripById: SELECT * FROM Trip WHERE id = ?;
+deletePoints: DELETE FROM TrackPoint WHERE tripId = ?;
+markDeleted: UPDATE Trip SET deleted = 1, updatedMs = ? WHERE id = ?;

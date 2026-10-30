@@ -1,0 +1,15 @@
+-- Offline gespeicherte Runden: vorberechnete Navigation (OSRM-JSON) + Infos zur Offline-Karte
+CREATE TABLE OfflineLoop (
+  loopId INTEGER NOT NULL PRIMARY KEY,
+  navJson TEXT NOT NULL,
+  navSha TEXT NOT NULL,
+  savedMs INTEGER NOT NULL,
+  mapBytes INTEGER NOT NULL DEFAULT 0,
+  mapComplete INTEGER NOT NULL DEFAULT 0
+);
+
+upsert: INSERT OR REPLACE INTO OfflineLoop VALUES (?, ?, ?, ?, ?, ?);
+setMap: UPDATE OfflineLoop SET mapBytes = ?, mapComplete = ? WHERE loopId = ?;
+byId: SELECT * FROM OfflineLoop WHERE loopId = ?;
+all: SELECT loopId, navSha, savedMs, mapBytes, mapComplete, length(navJson) AS navBytes FROM OfflineLoop ORDER BY savedMs DESC;
+remove: DELETE FROM OfflineLoop WHERE loopId = ?;

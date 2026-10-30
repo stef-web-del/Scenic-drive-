@@ -1,0 +1,93 @@
+<!DOCTYPE html><html lang="de"><head><meta charset="utf-8"><title>Scenic Routes – alle gültigen Runden ab OBI Miltenberg</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>/*LEAFLETCSS*/</style>
+<style>
+html,body{margin:0;height:100%;font:13px/1.35 system-ui,Segoe UI,Arial,sans-serif;color:#222}
+#map{position:absolute;left:330px;right:0;top:0;bottom:0}
+#side{position:absolute;left:0;top:0;bottom:0;width:330px;overflow:auto;background:#fafafa;border-right:1px solid #ddd;box-sizing:border-box;padding:10px 12px}
+h1{font-size:16px;margin:0 0 2px}h2{font-size:12px;text-transform:uppercase;color:#666;margin:12px 0 4px;letter-spacing:.04em}
+label{display:block;cursor:pointer}.row{display:flex;gap:6px;align-items:center}
+input[type=range]{flex:1;min-width:0}.row span{white-space:nowrap;min-width:52px}.muted{color:#777;font-size:12px}
+#cnt{font-weight:600}#info{background:#fff;border:1px solid #ddd;border-radius:6px;padding:8px;margin-top:6px;display:none}
+.tag{display:inline-block;background:#eef;border-radius:3px;padding:0 4px;margin:1px;font-size:11px}
+.lg{display:inline-block;width:22px;height:5px;margin-right:4px;vertical-align:middle;border-radius:2px}
+button{font:inherit;padding:2px 8px;cursor:pointer}
+#list{max-height:220px;overflow:auto;border:1px solid #ddd;background:#fff;font-size:12px}
+#list div{padding:2px 5px;cursor:pointer;border-bottom:1px solid #f0f0f0}#list div:hover{background:#eef}
+</style></head><body>
+<div id="side">
+<h1>Alle gültigen Runden</h1><div class="muted">Start OBI Miltenberg · 45–60 min · Daten: OpenStreetMap-Mitwirkende (ODbL), Höhen: Copernicus DEM</div>
+<div style="margin-top:6px"><span id="cnt"></span> Runden sichtbar</div>
+<h2>Klasse (Farbe = Score)</h2>
+<div id="kl"></div>
+<div class="muted" style="margin-top:4px"><span class="lg" style="background:linear-gradient(90deg,#fde725,#35b779,#31688e,#440154)"></span>Score 0,15 → 0,24</div>
+<h2>Region</h2><div id="rg"></div>
+<h2>Fahrzeit</h2>
+<div class="row">min <input type="range" id="tmin" min="45" max="60" step="1" value="45"><span id="tminv"></span></div>
+<div class="row">max <input type="range" id="tmax" min="45" max="60" step="1" value="60"><span id="tmaxv"></span></div>
+<h2>Score (Straßenqualität)</h2>
+<div class="row">ab <input type="range" id="smin" min="0.15" max="0.24" step="0.005" value="0.15"><span id="sminv"></span></div>
+<h2>Familien</h2>
+<label><input type="checkbox" id="rep"> nur Familienvertreter</label>
+<div class="row">max. Überschneidung <select id="lvl"></select></div>
+<div class="muted">Längengewichteter Jaccard: Runden mit mehr Überschneidung gehören zur Familie der besseren Runde.</div>
+<h2>Runde hervorheben</h2>
+<div class="row"><input id="q" placeholder="Runden-Nr." style="width:90px"><button id="go">zeigen</button><button id="clr">zurücksetzen</button></div>
+<div id="info"></div>
+<h2>Beste sichtbare Runden</h2><div id="list"></div>
+<h2>Ebenen</h2><div class="muted">Straßen-Heatmap, Referenzstrecken und Pausenorte über das Ebenen-Menü oben rechts.</div>
+</div>
+<div id="map"></div>
+<script>/*LEAFLETJS*/</script>
+<script>
+const D=/*DATA*/;
+const map=L.map('map',{preferCanvas:true,zoomControl:true}).setView(D.start,11);
+const rnd=L.canvas({padding:0.3,tolerance:4});
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,attribution:'© OpenStreetMap-Mitwirkende'}).addTo(map);
+const VIR=['#fde725','#b5de2b','#6ece58','#35b779','#1f9e89','#26828e','#31688e','#3e4989','#482878','#440154'];
+const col=s=>VIR[Math.max(0,Math.min(9,Math.floor((s-0.15)/0.09*10)))];
+const KL={A:'A 0,21–0,24',B:'B 0,18–0,21',C:'C 0,15–0,18'};
+const regions=[...new Set(D.loops.map(l=>l.rg))];
+const st={kl:new Set(['A','B','C']),rg:new Set(regions),tmin:45,tmax:60,smin:0.15,rep:false,lvl:1,hl:null};
+function cb(id,key,vals,lab){const el=document.getElementById(id);vals.forEach(v=>{const n=D.loops.filter(l=>(key=='kl'?l.kl:l.rg)==v).length;
+ const w=document.createElement('label');w.innerHTML=`<input type="checkbox" checked> ${lab(v)} <span class="muted">(${n})</span>`;
+ w.querySelector('input').onchange=e=>{e.target.checked?st[key].add(v):st[key].delete(v);upd()};el.appendChild(w)})}
+cb('kl','kl',['A','B','C'],v=>KL[v]);cb('rg','rg',regions,v=>v);
+const sel=document.getElementById('lvl');D.levels.forEach((t,i)=>{const o=document.createElement('option');o.value=i;o.textContent=Math.round(t*100)+' %';if(i==1)o.selected=true;sel.appendChild(o)});
+const grp=L.layerGroup().addTo(map);
+D.loops.sort((a,b)=>a.s-b.s);
+D.loops.forEach(l=>{l.ly=L.polyline(l.g,{renderer:rnd,color:col(l.s),weight:2,opacity:.55});
+ l.ly.bindTooltip(()=>`Runde ${l.id} · ${l.km} km · ${l.min} min · Score ${l.s.toFixed(3)} · Klasse ${l.kl}`,{sticky:true});
+ l.ly.on('click',()=>hl(l.id));});
+function famInfo(l){const i=+st.lvl;const fam=D.loops.filter(x=>x.f[i]==l.f[i]);const rep=fam.find(x=>x.r[i]);
+ return `Familie ${l.f[i]+1} bei ${Math.round(D.levels[i]*100)} % (${fam.length} Runden${l.r[i]?', diese Runde ist Vertreter':', Vertreter: Runde '+rep.id})`}
+function card(l){return `<b>Runde ${l.id}</b> · Klasse ${KL[l.kl]}<br>${l.km} km · ${l.min} min · ${l.hm} Hm<br>Score ${l.s.toFixed(3)} · Tour-Score ${l.t.toFixed(3)}<br>${l.rg}<br>
+ ${l.tags.map(t=>`<span class="tag">${t}</span>`).join('')}<p style="margin:5px 0">${l.tx}</p><div class="muted">${famInfo(l)}</div>`}
+function vis(l){const i=+st.lvl;return st.kl.has(l.kl)&&st.rg.has(l.rg)&&l.min>=st.tmin&&l.min<=st.tmax&&l.s>=st.smin-1e-9&&(!st.rep||l.r[i])}
+function upd(){grp.clearLayers();let v=D.loops.filter(vis);
+ v.forEach(l=>{const h=st.hl==null||st.hl==l.id;l.ly.setStyle({weight:st.hl==l.id?6:(st.rep?3:2),opacity:st.hl==null?(st.rep?.85:.55):(h?1:.12),color:st.hl==l.id?'#e3001b':col(l.s)});grp.addLayer(l.ly)});
+ const h=D.loops.find(l=>l.id==st.hl);if(h){h.ly.bringToFront();if(!vis(h)){h.ly.setStyle({weight:6,opacity:1,color:'#e3001b'});grp.addLayer(h.ly)}}
+ document.getElementById('cnt').textContent=v.length;
+ document.getElementById('list').innerHTML=v.slice().sort((a,b)=>b.s-a.s).slice(0,60).map(l=>`<div data-id="${l.id}">#${l.id} · ${l.kl} · ${l.s.toFixed(3)} · ${l.km} km · ${l.min} min</div>`).join('');
+ document.querySelectorAll('#list div').forEach(d=>d.onclick=()=>hl(+d.dataset.id));
+ ['tmin','tmax','smin'].forEach(k=>document.getElementById(k+'v').textContent=k=='smin'?(+st[k]).toFixed(3):st[k]+' min')}
+function hl(id){const l=D.loops.find(x=>x.id==id);const inf=document.getElementById('info');if(!l){inf.style.display='block';inf.textContent='Runde '+id+' nicht gefunden';return}
+ st.hl=id;inf.style.display='block';inf.innerHTML=card(l);upd();map.fitBounds(l.ly.getBounds(),{padding:[30,30]});L.popup({maxWidth:340}).setLatLng(l.ly.getCenter()).setContent(card(l)).openOn(map)}
+document.getElementById('go').onclick=()=>hl(+document.getElementById('q').value);
+document.getElementById('q').onkeydown=e=>{if(e.key=='Enter')hl(+e.target.value)};
+document.getElementById('clr').onclick=()=>{st.hl=null;document.getElementById('info').style.display='none';map.closePopup();upd()};
+[['tmin','tmin'],['tmax','tmax'],['smin','smin']].forEach(([id,k])=>document.getElementById(id).oninput=e=>{st[k]=+e.target.value;
+ if(st.tmin>st.tmax){if(k=='tmin'){st.tmax=st.tmin;tmax.value=st.tmin}else{st.tmin=st.tmax;tmin.value=st.tmax}}upd()});
+document.getElementById('rep').onchange=e=>{st.rep=e.target.checked;upd()};sel.onchange=e=>{st.lvl=+e.target.value;upd();if(st.hl!=null)hl(st.hl)};
+// Ebenen
+const hcol=s=>s>0.45?'#7a0177':s>0.35?'#c51b8a':s>0.28?'#f768a1':'#fbb4b9';
+const heat=L.layerGroup(D.heat.map(([s,g])=>L.polyline(g,{renderer:rnd,color:hcol(s),weight:s>0.35?4:3,opacity:.8,interactive:false})));
+const refs=L.layerGroup(D.refs.map(r=>L.polyline(r.g,{renderer:rnd,color:'#000',weight:5,opacity:.8,dashArray:'8 6'}).bindTooltip('Referenz: '+r.n,{sticky:true})));
+const pau=L.layerGroup(D.pauses.map(p=>L.circleMarker(p.ll,{renderer:rnd,radius:4+Math.min(6,Math.sqrt(p.c)/3),color:'#8a5a00',fillColor:'#ffb000',fillOpacity:.9,weight:1})
+ .bindTooltip(`${p.n} (${p.k}) · Pausenvorschlag in ${p.c} Runden`)));
+const startM=L.marker(D.start,{title:'Start: OBI Miltenberg'}).bindTooltip('Start/Ziel: OBI Miltenberg',{permanent:true,direction:'right'}).addTo(map);
+L.control.layers(null,{'Runden':grp,'Straßenscore-Heatmap (Score über 0,2)':heat,'Referenzstrecken':refs,'Pausenorte':pau,'Start OBI Miltenberg':startM},{collapsed:false}).addTo(map);
+const lg=L.control({position:'bottomright'});lg.onAdd=()=>{const d=L.DomUtil.create('div');d.style.cssText='background:#fff;padding:6px 8px;border-radius:5px;font-size:12px;box-shadow:0 1px 4px #0003';
+ d.innerHTML='<b>Runden-Score</b><br>'+[0.15,0.18,0.21,0.24].map(s=>`<span class="lg" style="background:${col(s-0.001)}"></span>${s.toFixed(2).replace('.',',')}`).join(' ');return d};lg.addTo(map);
+upd();map.fitBounds(L.featureGroup(D.loops.map(l=>l.ly)).getBounds(),{padding:[10,10]});
+</script></body></html>

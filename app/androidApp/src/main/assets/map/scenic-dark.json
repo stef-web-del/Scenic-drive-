@@ -1,0 +1,187 @@
+{
+ "version": 8,
+ "name": "Scenic Routes dark (aus Tokens)",
+ "glyphs": "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
+ "sources": {
+  "omt": {
+   "type": "vector",
+   "url": "https://tiles.openfreemap.org/planet",
+   "attribution": "\u00a9 OpenStreetMap-Mitwirkende (ODbL) \u00b7 OpenFreeMap"
+  }
+ },
+ "layers": [
+  {
+   "id": "land",
+   "type": "background",
+   "paint": {
+    "background-color": "#1A1A2E"
+   }
+  },
+  {
+   "id": "forest",
+   "type": "fill",
+   "source": "omt",
+   "source-layer": "landcover",
+   "filter": [
+    "==",
+    "class",
+    "wood"
+   ],
+   "paint": {
+    "fill-color": "#1D2F3A"
+   }
+  },
+  {
+   "id": "park",
+   "type": "fill",
+   "source": "omt",
+   "source-layer": "park",
+   "paint": {
+    "fill-color": "#1D2F3A",
+    "fill-opacity": 0.5
+   }
+  },
+  {
+   "id": "water",
+   "type": "fill",
+   "source": "omt",
+   "source-layer": "water",
+   "paint": {
+    "fill-color": "#0F3460"
+   }
+  },
+  {
+   "id": "river",
+   "type": "line",
+   "source": "omt",
+   "source-layer": "waterway",
+   "paint": {
+    "line-color": "#0F3460",
+    "line-width": 1.5
+   }
+  },
+  {
+   "id": "road-minor+service+track",
+   "type": "line",
+   "source": "omt",
+   "source-layer": "transportation",
+   "filter": [
+    "in",
+    "class",
+    "minor",
+    "service",
+    "track"
+   ],
+   "layout": {
+    "line-cap": "round",
+    "line-join": "round"
+   },
+   "paint": {
+    "line-color": "#2E3756",
+    "line-width": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     8,
+     0.5,
+     16,
+     4
+    ]
+   }
+  },
+  {
+   "id": "road-tertiary+secondary",
+   "type": "line",
+   "source": "omt",
+   "source-layer": "transportation",
+   "filter": [
+    "in",
+    "class",
+    "tertiary",
+    "secondary"
+   ],
+   "layout": {
+    "line-cap": "round",
+    "line-join": "round"
+   },
+   "paint": {
+    "line-color": "#2E3756",
+    "line-width": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     8,
+     0.75,
+     16,
+     6
+    ]
+   }
+  },
+  {
+   "id": "road-primary+trunk+motorway",
+   "type": "line",
+   "source": "omt",
+   "source-layer": "transportation",
+   "filter": [
+    "in",
+    "class",
+    "primary",
+    "trunk",
+    "motorway"
+   ],
+   "layout": {
+    "line-cap": "round",
+    "line-join": "round"
+   },
+   "paint": {
+    "line-color": "#414C70",
+    "line-width": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     8,
+     1.0,
+     16,
+     8
+    ]
+   }
+  },
+  {
+   "id": "place",
+   "type": "symbol",
+   "source": "omt",
+   "source-layer": "place",
+   "filter": [
+    "in",
+    "class",
+    "town",
+    "village",
+    "city"
+   ],
+   "layout": {
+    "text-field": "{name}",
+    "text-font": [
+     "Noto Sans Regular"
+    ],
+    "text-size": 12
+   },
+   "paint": {
+    "text-color": "#B8C1D6",
+    "text-halo-color": "#1A1A2E",
+    "text-halo-width": 1.2
+   }
+  }
+ ]
+}
