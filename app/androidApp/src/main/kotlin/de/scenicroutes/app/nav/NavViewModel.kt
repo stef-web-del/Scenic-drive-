@@ -150,8 +150,12 @@ class NavViewModel private constructor(
         viewModelScope.launch { graph.settings.navFlow.collect { p -> tts.apply(p); if (policy.guidanceVisible) tts.setMuted(!p.voiceOn) } }
         viewModelScope.launch {
             navigationUiState.collect { s ->
-                val l = s.location ?: return@collect
+                // Abweichung immer mit der ROHEN Position bewerten: Ferrostar liefert in s.location die auf die
+                // Route gesnappte Position, solange es selbst keine Abweichung erkennt (z. B. Genauigkeit > 40 m
+                // oder Abstand nur zum aktuellen Schritt gemessen) – dann sah der OffRouteMonitor nie eine Abweichung.
+                val l = (s.tripState as? TripState.Navigating)?.userLocation ?: s.location ?: return@collect
                 val p = LatLon(l.coordinates.lat, l.coordinates.lng)
+                val roughFix = l.horizontalAccuracy > 60.0
                 lastLoc = p
                 if (!_extras.value.started) return@collect
                 graph.navLocations.tryEmit(TrackPoint(System.currentTimeMillis(), p.lat, p.lon, null, l.speed?.value, l.horizontalAccuracy))
@@ -159,6 +163,7 @@ class NavViewModel private constructor(
                 lastHeading = l.courseOverGround?.degrees?.toDouble()
                 // Zeitstempel nur echt fahren: Simulation läuft mit warpFactor 4, dort keine Sprungbegrenzung.
                 val now = if (_extras.value.simulate) null else System.currentTimeMillis()
+                if (roughFix) { syncSteps(p, now ?: System.currentTimeMillis()); return@collect }
                 val changed = monitor.update(p, now)
                 val off = monitor.state == OffRouteMonitor.State.OFF_LOOP
                 val track = routeTrack
@@ -181,6 +186,10 @@ class NavViewModel private constructor(
                         OffRoutePolicy.Action.Ask -> tts.setMuted(true)
                         else -> {}
                     }
+                    // Erster Versuch fehlgeschlagen/übersprungen (kein Netz, busy): nicht still aufgeben.
+                    off && policy.retryDue(t) -> rejoin(reason = "Rückweg wird erneut berechnet …")
+                    // Anfahrt läuft (Runde noch nicht erreicht) und man hat die Anfahrt verlassen → Anfahrt neu.
+                    !monitor.armed && track?.state == OffRouteMonitor.State.OFF_LOOP && policy.approachReplanDue(t) -> reapproach()
                 }
                 _extras.value = _extras.value.copy(offLoop = off, offMode = policy.mode, progressKm = monitor.progressM / 1000)
                 syncSteps(p, t)
@@ -348,12 +357,32 @@ class NavViewModel private constructor(
                 val r = routeOf(b)
                 core.replaceRoute(r)
                 trackRoute(r)
+                policy.planSucceeded()
                 if (_extras.value.simulate) locationProvider.enableSimulationOn(r)
                 val skip = (b.skippedM ?: 0.0) / 1000
                 _extras.value = _extras.value.copy(busy = false, message = if (skip > 0.3) "Umleitung: %.1f km der Runde ausgelassen".format(skip) else "Rückweg zur Runde berechnet (${'$'}{rj.via})")
             }.onFailure {
                 _extras.value = _extras.value.copy(busy = false, message = "Kein Rückweg gefunden – bitte selbst zur Runde zurückfahren")
             }
+        }
+    }
+
+    /** Anfahrt verlassen: von hier neu zum Einstieg (Anfang der aktiven Runde) rechnen und davor hängen. */
+    private fun reapproach() {
+        val here = lastLoc ?: return
+        if (_extras.value.busy) return
+        val chain = graph.routers(); val active = activeBundle ?: return
+        if (chain.isEmpty) { _extras.value = _extras.value.copy(message = "Kein Routing verfügbar – bitte selbst zum Einstieg fahren"); return }
+        _extras.value = _extras.value.copy(busy = true, message = "Anfahrt wird neu berechnet …")
+        viewModelScope.launch {
+            runCatching { Rejoin.approach(active, here, activeLine.points.first(), lastHeading, chain) }
+                .onSuccess { (ap, via) ->
+                    val r = routeOf(LoopEntry.prepend(ap, active))
+                    core.replaceRoute(r); trackRoute(r)
+                    if (_extras.value.simulate) locationProvider.enableSimulationOn(r)
+                    _extras.value = _extras.value.copy(busy = false, message = "Anfahrt neu berechnet ($via)")
+                }
+                .onFailure { _extras.value = _extras.value.copy(busy = false, message = "Anfahrt konnte nicht neu berechnet werden – versuche es gleich wieder") }
         }
     }
 

@@ -14,6 +14,10 @@ class RoadGraph:
         self.time=E.time_s.values/p.speed_factor; self.len=E.len_m.values; self.score=E.score.values
         self.isb=is_b(E); self.town=is_town(E)
         mult=np.where(self.isb,p.b_cost_mult,1.0)
+        tm=getattr(p,'town_minor_mult',1.0)
+        if tm!=1.0:
+            minor=E.highway.isin(['residential','living_street','unclassified','service']).values
+            mult=mult*np.where(minor&self.town,tm,1.0)
         if p.avoid_eids: mult[list(p.avoid_eids)]*=p.avoid_mult
         if not p.allow_narrow:
             import pandas as pd

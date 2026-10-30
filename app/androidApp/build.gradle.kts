@@ -13,8 +13,8 @@ android {
         applicationId = "de.scenicroutes.app"
         minSdk = 29
         targetSdk = 36
-        versionCode = 13
-        versionName = "0.6.4"
+        versionCode = 14
+        versionName = "0.6.5"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Optionaler Navigations-Server (Einstellungen). Leer = Routen von Vercel/aus der App.
         buildConfigField("String", "ROUTING_PACK_URL", "\"https://wqofepnfttvlzsvq.public.blob.vercel-storage.com/routing/miltenberg-car-v1.tar.gz\"")
